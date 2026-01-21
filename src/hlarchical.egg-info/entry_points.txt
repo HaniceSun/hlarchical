@@ -1,0 +1,2 @@
+[console_scripts]
+hlarchical = hlarchical.cli:main
