@@ -10,13 +10,13 @@ While high-resolution HLA typing using sequencing technologies is accurate, it r
 
 Inspired by previous studies, hlarchical aims to improve HLA imputation performance by exploring and exploiting the following features:
 
-(1) hierarchical modeling of HLA alleles that reflects the natural structure of HLA nomenclature (e.g., 2-digit → 4-digit resolution);
+(1) hierarchical modeling of HLA alleles that reflects the natural structure of HLA nomenclature (e.g., 2-digit -> 4-digit resolution)
 
-(2) mixture-of-experts (MoE) architectures that enable allele-specific experts to focus on relevant subsets of SNP features while sharing information across related alleles; and
+(2) mixture-of-experts (MoE) architectures that enable allele-specific experts to focus on relevant subsets of SNP features while sharing information across related alleles
 
-(3) multi-task learning to jointly optimize predictions across multiple HLA resolutions and loci.
+(3) multi-task learning to jointly optimize predictions across multiple HLA resolutions and loci
 
-(4) configurable model backbones (e.g., MLP, CNN, GPT) and hyperparameters to enable systematic evaluation and optimization.
+(4) configurable model backbones (e.g., MLP, CNN, GPT) and hyperparameters to enable systematic evaluation and optimization
 
 ## Installation
 
