@@ -239,39 +239,6 @@ class Trainer:
             plt.savefig(plot_file)
             plt.close()
 
-    def saliency_map(self, epoch=None, sal_seq=[], out_file='saliency.txt', target=1, alphabet=['N', 'A', 'C', 'G', 'T']):
-        self.load_checkpoint(epoch)
-        self.model.eval()
-        for n, seq in enumerate(sal_seq):
-            seq2 = torch.tensor([[alphabet.index(x) if x in alphabet else 0 for x in seq]])
-            X = self.model.OneHot(seq2)
-
-            X.requires_grad = True
-            pred = self.model(X, from_onehot=True)
-            loss = self.loss_fn(pred, torch.tensor([target]).to(self.device))
-            loss.backward()
-
-            #saliency = X.grad.abs()
-            #sal = np.sum(np.multiply(saliency.squeeze().cpu().numpy(), X.squeeze().cpu().numpy()), axis=0)
-
-            saliency = -X.grad
-            sal = np.clip(np.sum(np.multiply(saliency.squeeze().cpu().numpy(), X.detach().squeeze().cpu().numpy()), axis=0), 0, None)
-
-            df = pd.DataFrame({'index':list(range(len(seq))), 'seq':list(seq), 'saliency':list(sal)})
-            out_file_n = out_file.replace('.txt', f'_seq{n}.txt')
-            plot_file_n = out_file.replace('.txt', f'_seq{n}.pdf')
-            df.to_csv(out_file_n, index=False, header=True, sep='\t')
-            fig = plt.figure(figsize=[12, 6])
-            ax = fig.add_subplot()
-            ax.bar(df['index'], df['saliency'])
-            ax.set_xlim(-1, len(df['index']))
-            ax.set_xticks(df['index'])
-            ax.set_xticklabels(df['seq'], fontsize=8)
-            ax.set_ylabel('Magnitude of saliency values')
-            plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
-            plt.tight_layout()
-            plt.savefig(plot_file_n)
-
     def count_parameters(self, with_lazy=True, show_details=False):
         if with_lazy:
             X,y = next(iter(self.train_dataset))
@@ -350,4 +317,3 @@ if __name__ == '__main__':
     trainer.run()
     trainer.test()
     trainer.predict()
-    trainer.saliency_map()
