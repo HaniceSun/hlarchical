@@ -1,0 +1,16 @@
+models:
+  mlp:
+    class: HierarchicalHLA
+    params:
+      backbone_class: MLPBackbone
+      input_channels: 2
+      hidden_dims: [64, 32]
+      dropout: 0.3
+      learning_rate: 5e-4
+      weight_decay: 0.01
+      early_stopping: false
+      maps_file: 'maps.txt'
+      masks_file: 'masks.txt'
+      moe: true
+      #ground_truth_gated_loss: true
+      #gated_loss_lambda: 0.5
