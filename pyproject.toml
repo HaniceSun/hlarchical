@@ -17,7 +17,7 @@ authors = [
 "Homepage" = "https://github.com/HaniceSun/hlarchical"
 
 [project.scripts]
-hlarchical = "hlarchical.cli:main"
+hla = "hlarchical.cli:main"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

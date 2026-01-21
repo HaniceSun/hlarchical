@@ -32,12 +32,12 @@ conda activate hlarchical
 # Quick Start
 
 ```
-hlarchical --help
-hlarchical preprocess
-hlarchical torch-dataset
-hlarchical train
-hlarchical eval
-hlarchical predict
+hla --help
+hla preprocess
+hla torch-dataset
+hla train
+hla eval
+hla predict
 ```
 
 ## Author and License
