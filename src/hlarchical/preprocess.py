@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 class DataPreprocessor:
-    def __init__(self, ref_bim='Pan-Asian_REF.bim', sample_bim='1958BC.bim', ref_phased='Pan-Asian_REF.bgl.phased', hla_filter=['HLA'], non_hla_filter=['HLA'], hla_renaming=True, expert_by_gene=False, expert_by_ld=True):
+    def __init__(self, ref_bim='Pan-Asian_REF.bim', sample_bim='1958BC.bim', ref_phased='Pan-Asian_REF.bgl.phased', hla_filter=['HLA'], non_hla_filter=['HLA'], hla_renaming=True, expert_by='ld'):
         self.ref_bim = pd.read_table(ref_bim, header=None, sep='\t')
         self.ref_phased = pd.read_table(ref_phased, header=None, sep=' ')
         self.sample_bim = pd.read_table(sample_bim, header=None, sep='\t')
@@ -33,8 +33,7 @@ class DataPreprocessor:
 
         self.hla_filter = hla_filter
         self.non_hla_filter = non_hla_filter
-        self.expert_by_gene = expert_by_gene
-        self.expert_by_ld = expert_by_ld
+        self.expert_by = expert_by
 
         self.hla_renaming = hla_renaming
         if hla_renaming:
@@ -67,7 +66,7 @@ class DataPreprocessor:
         self.expert_groups['E2'] = ['HLA-DPA1', 'HLA-DPB1']
         self.expert_groups['E3'] = ['HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def make_features(self, by_id=True, by_pos=False, check_alleles=True, subset_sample_bim=None, out_file='features.txt'):
+    def make_features(self, id_by='rs', check_alleles=True, subset_sample_bim=None, out_file='features.txt'):
         # Subset sample bim to the HLA region
         if subset_sample_bim is not None:
             wh = []
@@ -84,12 +83,12 @@ class DataPreprocessor:
             print(f"Subsetted sample bim to the region: {subset_sample_bim}")
 
         # Get shared variants between reference and sample
-        if by_id:
+        if id_by == 'rs':
             df = pd.merge(self.ref_bim, self.sample_bim, left_on='id_ref', right_on='id_sample')
-        elif by_pos:
+        elif id_by == 'pos':
             df = pd.merge(self.ref_bim, self.sample_bim, left_on=['chrom_ref', 'pos_ref'], right_on=['chrom_sample', 'pos_sample'])
         else:
-            raise ValueError("Either by_id or by_pos must be True.")
+            raise ValueError("Either 'rs' or 'pos' can be used for id_by")
 
         if check_alleles:
             wh = (df['A1_ref'] == df['A1_sample']) & (df['A2_ref'] == df['A2_sample'])
@@ -209,9 +208,9 @@ class DataPreprocessor:
         maps['parent'] = parent
         maps['parent_val'] = parent_value
 
-        if self.expert_by_gene:
+        if self.expert_by == 'gene':
             maps['expert'] = expert
-        else:
+        elif self.expert_by == 'ld':
             E = []
             for x in expert:
                 expert_id = '.'
@@ -255,10 +254,10 @@ class DataPreprocessor:
 
         start_end_dict = {}
         for gene in H:
-            if self.expert_by_gene:
+            if self.expert_by == 'gene':
                 positions = H[gene]
                 start_end_dict[gene] = (min(positions), max(positions))
-            elif self.expert_by_ld:
+            elif self.expert_by == 'ld':
                 positions = []
                 if gene in self.ld_blocks:
                     for g in self.ld_blocks[gene]:
@@ -270,9 +269,9 @@ class DataPreprocessor:
         L = []
         E = []
         for gene in start_end_dict:
-            if self.expert_by_gene:
+            if self.expert_by == 'gene':
                 expert = gene
-            else:
+            elif self.expert_by == 'ld':
                 expert = '.'
                 for k in self.expert_groups:
                     if gene in self.expert_groups[k]:

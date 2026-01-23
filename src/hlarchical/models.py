@@ -33,6 +33,62 @@ class MLPBackbone(nn.Module):
         return self.net(x)
 
 
+class CNNBackbone(nn.Module):
+    def __init__(
+        self,
+        input_channels=2,
+        input_length=1000,
+        hidden_dims=(64, 128, 256),
+        kernel_sizes=(7, 5, 3),
+        strides=(1, 1, 1),
+        dropout=0.1,
+        use_batchnorm=True,
+        global_pool="avg",  # "avg" or "max"
+    ):
+        super().__init__()
+
+        assert len(hidden_dims) == len(kernel_sizes) == len(strides)
+
+        layers = []
+        prev_c = input_channels
+
+        for out_c, k, s in zip(hidden_dims, kernel_sizes, strides):
+            layers.append(
+                nn.Conv1d(
+                    prev_c,
+                    out_c,
+                    kernel_size=k,
+                    stride=s,
+                    padding=k // 2
+                )
+            )
+            if use_batchnorm:
+                layers.append(nn.BatchNorm1d(out_c))
+            layers.append(nn.ReLU(inplace=True))
+            layers.append(nn.Dropout(dropout))
+            prev_c = out_c
+
+        self.conv = nn.Sequential(*layers)
+
+        if global_pool == "avg":
+            self.pool = nn.AdaptiveAvgPool1d(1)
+        elif global_pool == "max":
+            self.pool = nn.AdaptiveMaxPool1d(1)
+        else:
+            raise ValueError("global_pool must be 'avg' or 'max'")
+
+        self.output_dim = hidden_dims[-1]
+
+    def forward(self, x):
+        """
+        x: (batch, channels, length)
+        """
+        x = self.conv(x)
+        x = self.pool(x)      # (B, C, 1)
+        x = x.squeeze(-1)     # (B, C)
+        return x
+
+
 class HierarchicalHLA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -68,25 +124,53 @@ class HierarchicalHLA(nn.Module):
             else:
                 print(f'no maps file found {cfg.maps_file}')
 
-        backbone_class = eval(cfg.backbone_class)
+        if cfg.backbone == 'mlp':
+            backbone_class = MLPBackbone
+        elif cfg.backbone == 'cnn':
+            backbone_class = CNNBackbone
+
         if not self.moe:
-            self.backbone = backbone_class(
-                input_channels=cfg.input_channels,
-                input_length=cfg.input_length,
-                hidden_dims=cfg.hidden_dims,
-                dropout=cfg.dropout,
-            )
+            if cfg.backbone == 'mlp':
+                self.backbone = backbone_class(
+                    input_channels=cfg.input_channels,
+                    input_length=cfg.input_length,
+                    hidden_dims=cfg.hidden_dims,
+                    dropout=cfg.dropout,
+                )
+            elif cfg.backbone == 'cnn':
+                self.backbone = backbone_class(
+                    input_channels=cfg.input_channels,
+                    input_length=cfg.input_length,
+                    hidden_dims=cfg.hidden_dims,
+                    kernel_sizes=cfg.kernel_sizes,
+                    strides=cfg.strides,
+                    dropout=cfg.dropout,
+                    use_batchnorm=cfg.use_batchnorm,
+                    global_pool=cfg.global_pool,
+                )
             self.heads = nn.ModuleDict({head:nn.Linear(self.backbone.output_dim, (self.maps[head][0] + 1) * 2) for head in self.maps})
         else:
             self.experts = nn.ModuleDict()
             for e in self.expert_to_head:
                 mask = self.masks[e]
-                expert = backbone_class(
-                    input_channels=cfg.input_channels,
-                    input_length=sum(mask),
-                    hidden_dims=cfg.hidden_dims,
-                    dropout=cfg.dropout,
-                )
+                if cfg.backbone == 'mlp':
+                    expert = backbone_class(
+                        input_channels=cfg.input_channels,
+                        input_length=sum(mask),
+                        hidden_dims=cfg.hidden_dims,
+                        dropout=cfg.dropout,
+                    )
+                elif cfg.backbone == 'cnn':
+                    expert = backbone_class(
+                        input_channels=cfg.input_channels,
+                        input_length=sum(mask),
+                        hidden_dims=cfg.hidden_dims,
+                        kernel_sizes=cfg.kernel_sizes,
+                        strides=cfg.strides,
+                        dropout=cfg.dropout,
+                        use_batchnorm=cfg.use_batchnorm,
+                        global_pool=cfg.global_pool,
+                    )
                 self.experts[e] = expert
             self.heads = nn.ModuleDict({head:nn.Linear(self.experts[self.maps[head][-1]].output_dim, (self.maps[head][0] + 1) * 2) for head in self.maps})
 

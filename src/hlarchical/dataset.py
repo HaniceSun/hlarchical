@@ -32,21 +32,21 @@ class CustomDataset(Dataset):
         y = self.y[idx]
         return(X, y)
 
-    def split_save_dataset(self, ratio=[0.8, 0.1, 0.1], batch_size=32, shuffle=True, num_workers=0, cv=0):
+    def split_save_dataset(self, ratio=[0.8, 0.1, 0.1], batch_size=32, shuffle=True, num_workers=0, n_cv=0):
         self.train_file = self.out_file + '_dataset_train.pt'
         self.val_file = self.out_file + '_dataset_val.pt'
         self.test_file = self.out_file + '_dataset_test.pt'
 
         if len(ratio) == 2:
             self.ds_train, self.ds_test = torch.utils.data.random_split(self, ratio)
-            if cv == 0:
+            if n_cv == 0:
                 self.dl_train = DataLoader(self.ds_train, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
                 self.dl_test = DataLoader(self.ds_test, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
                 torch.save(self.dl_train, self.train_file)
                 torch.save(self.dl_test, self.test_file)
                 print(f'datasets saved to {self.train_file} and {self.test_file}')
             else:
-                kf = KFold(n_splits=cv, shuffle=True, random_state=self.random_seed)
+                kf = KFold(n_splits=n_cv, shuffle=True, random_state=self.random_seed)
                 for fold, (train_index, val_index) in enumerate(kf.split(self.ds_train)):
                     ds_train_cv = torch.utils.data.Subset(self.ds_train, train_index)
                     ds_val_cv = torch.utils.data.Subset(self.ds_train, val_index)

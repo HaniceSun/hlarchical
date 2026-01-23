@@ -2,7 +2,7 @@ models:
   mlp:
     class: HierarchicalHLA
     params:
-      backbone_class: MLPBackbone
+      backbone: mlp
       input_channels: 2
       hidden_dims: [64, 32]
       dropout: 0.3
@@ -12,5 +12,24 @@ models:
       maps_file: 'maps.txt'
       masks_file: 'masks.txt'
       moe: true
-      #ground_truth_gated_loss: true
-      #gated_loss_lambda: 0.5
+      ground_truth_gated_loss: false
+      gated_loss_lambda: 0.5
+  cnn:
+    class: HierarchicalHLA
+    params:
+      backbone: cnn
+      input_channels: 2
+      hidden_dims: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      strides: [1, 1, 1]
+      dropout: 0.1
+      use_batchnorm: true
+      global_pool: 'avg'  # 'avg' or 'max'
+      learning_rate: 5e-4
+      weight_decay: 0.01
+      early_stopping: false
+      maps_file: 'maps.txt'
+      masks_file: 'masks.txt'
+      moe: true
+      ground_truth_gated_loss: false
+      gated_loss_lambda: 0.5
