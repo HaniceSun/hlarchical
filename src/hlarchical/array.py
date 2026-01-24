@@ -11,7 +11,7 @@ class Array():
 
     def run_snp2hla(self, in_file='1958BC', ref_file='HM_CEU_REF', snp2hla_dir=None, heap_size=2000, window_size=1000):
         if not snp2hla_dir:
-            snp2hla_dir = f'{resources.files("hla6").parent.parent}/vendor/SNP2HLA/home'
+            snp2hla_dir = f'{resources.files("hlarchical").parent.parent}/vendor/SNP2HLA/home'
 
         out_file = os.path.abspath(f'{in_file}_{ref_file}')
 
@@ -31,11 +31,11 @@ class Array():
 
     def run_deephla(self, mode='train', in_file='1958BC_Pan-Asian_REF', ref_file='Pan-Asian_REF', subset=[], model_json=None, model_dir='model', deephla_dir=None):
         if not deephla_dir:
-            deephla_dir = f'{resources.files("hla6").parent.parent}/vendor/DEEP-HLA'
+            deephla_dir = f'{resources.files("hlarchical").parent.parent}/vendor/DEEP-HLA'
 
         if mode == 'train':
             if not os.path.exists(f'{in_file}.bgl.phased') or not os.path.exists(f'{ref_file}.bgl.phased'):
-                print('Use hla6 run-snp2hla first to get the phased bgl files')
+                print('Use hlarchical run-snp2hla first to get the phased bgl files')
                 return
 
             if subset:

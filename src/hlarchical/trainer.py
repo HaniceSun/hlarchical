@@ -6,6 +6,7 @@ class Trainer:
     def __init__(self, config_file='config.yaml', model_name='mlp', train_file=None, val_file=None, test_file=None,
                  metrics_file=None, lr_lambda=None, print_every_n_batches=100):
         self.config = self.load_yaml(config_file)
+        self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
         self.train_dataset, self.val_dataset, self.test_dataset = None, None, None
         if train_file and os.path.exists(train_file):
@@ -161,7 +162,7 @@ class Trainer:
     def test(self, epoch, maps_file='maps.txt'):
         self.eval(epoch, maps_file=maps_file, test=True)
 
-    def predict(self, epoch=None, pred_file='to_predict.txt', out_file='predicted.txt', maps_file='maps.txt'):
+    def predict(self, epoch=None, pred_file='to_predict.txt', out_file='predicted.txt', maps_file='maps.txt', split_by_digit=True):
         df = pd.read_table(maps_file, header=0, sep='\t')
         maps = {}
         for n in range(df.shape[0]):
@@ -194,6 +195,43 @@ class Trainer:
                     if allele1 != '.' or allele2 != '.':
                         ouFile.write('\t'.join([df.iloc[n, 0], head, allele1, allele2]) + '\n')
         ouFile.close()
+
+        if split_by_digit:
+            df = pd.read_table(out_file, header=0, sep='\t')
+            D = {}
+            digits = []
+            for n in range(df.shape[0]):
+                sample_id = df['SampleID'].iloc[n]
+                hla = df['HLA'].iloc[n]
+                digit = len(hla.split(':')) * 2
+                if digit not in digits:
+                    digits.append(digit)
+                allele1 = df['Allele1'].iloc[n]
+                allele2 = df['Allele2'].iloc[n]
+                D.setdefault(sample_id, {})
+                D[sample_id][hla] = (allele1, allele2)
+
+            for digit in sorted(digits):
+                L = []
+                if digit == 2:
+                    for sample_id in D:
+                        for hla in self.HLA:
+                            allele1, allele2 = D[sample_id].get(hla, ('.', '.'))
+                            L.append([sample_id, hla, allele1, allele2])
+                else:
+                    df = pd.read_table(out_file.replace('.txt', f'_digit{digit - 2}.txt'), header=0, sep='\t')
+                    for n in range(df.shape[0]):
+                        sample_id = df['SampleID'].iloc[n]
+                        hla = df['HLA'].iloc[n]
+                        allele1 = df['Allele1'].iloc[n]
+                        allele2 = df['Allele2'].iloc[n]
+                        allele1_d4 = D[sample_id].get(allele1, ('.', '.'))[0]
+                        allele2_d4 = D[sample_id].get(allele2, ('.', '.'))[1]
+                        L.append([sample_id, hla, allele1_d4, allele2_d4])
+                if len(L) > 0:
+                    df_out = pd.DataFrame(L)
+                    df_out.columns = ['SampleID', 'HLA', 'Allele1', 'Allele2']
+                    df_out.to_csv(out_file.replace('.txt', f'_digit{digit}.txt'), index=False, sep='\t')
 
     def log_metrics(self):
         cols = ['epoch', 'best_epoch', 'learning_rate',
