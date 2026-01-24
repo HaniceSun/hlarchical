@@ -319,6 +319,52 @@ class DataPreprocessor:
         df = df[df['id_ref'] != '.'].copy()
         return df
 
+    def prepare_to_predict(self, sample_phased='sample.bgl.phased', features_file='features.txt', out_file='to_predict.txt'):
+        df_features = pd.read_table(features_file, header=0, sep='\t')
+        features = []
+        for n in range(1, df_features.shape[1], 2):
+            fields = df_features.columns[n].split('_')
+            k = fields[1]
+            if k not in features:
+                features.append(k)
+
+
+        sample_phased = pd.read_table(sample_phased, header=None, sep=' ')
+        samples = list(sample_phased[sample_phased[1] == 'id'].iloc[0, 2::2])
+        cols = list(sample_phased.columns)
+        cols[0] = 'I'
+        cols[1] = 'id_sample'
+        for i in range(2, sample_phased.shape[1], 2):
+            cols[i] = f'A1_{samples[i//2 - 1]}'
+            cols[i + 1] = f'A2_{samples[i//2 - 1]}'
+        sample_phased.columns = cols
+
+        df = pd.merge(self.ref_bim, sample_phased, left_on='id_ref', right_on='id_sample')
+        wh = df['id_ref'].isin(features)
+        df = df[wh]
+        if df.shape[0] != len(features):
+            print('Warning: some features are missing in the sample phased data')
+
+        M = np.zeros((len(samples), len(features) * 2), dtype=int)
+        H = []
+        idx_start = 8
+        for n in range(idx_start, df.shape[1], 2):
+            for j in range(2):
+                wh = (df.iloc[:, n + j] == df['A1_ref']).values.astype(int)
+                for m in range(len(wh)):
+                    M[(n - idx_start) // 2, m * 2 + j] = wh[m]
+                    if j == 0 and n == idx_start:
+                        id_ref = df['id_ref'].iloc[m]
+                        H.append(f'A1_{id_ref}')
+                        H.append(f'A2_{id_ref}')
+
+        df = pd.DataFrame(M)
+        df.index = samples
+        df.index.name = 'sample'
+        df.columns = H
+        df.to_csv(out_file, sep='\t', index=True, header=True)
+        print(f'features data to predict saved to {out_file}')
+
 if __name__ == '__main__':
     dp = DataPreprocessor()
     #dp = DataPreprocessor(ref_bim='HM_CEU_REF.bim', sample_bim='1958BC.bim', ref_phased='HM_CEU_REF.bgl.phased')

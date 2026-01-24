@@ -57,13 +57,18 @@ def get_parser():
     p5.add_argument('--test_file', type=str, default='hla_dataset_test.pt', help='test dataset file')
     p5.add_argument('--maps_file', type=str, default='maps.txt', help='the maps file from preprocessing step')
 
-    p6 = subparsers.add_parser("predict", help="predicted using the trained model")
-    p6.add_argument('--config_file', type=str, default='config.yaml', help='the config file for model and training parameters')
-    p6.add_argument('--model_name', type=str, default='mlp', help='the model name defined in the config file')
-    p6.add_argument('--pred_file', type=str, default='to_predict.txt', help='input dataset file for prediction')
-    p6.add_argument('--maps_file', type=str, default='maps.txt', help='the maps file from preprocessing step')
-    p6.add_argument('--epoch', type=int, default=99, help='the epoch of the trained model to be used for prediction')
-    p6.add_argument('--output', type=str, default='hla_predicted.txt', help='output prediction file')
+    p6 = subparsers.add_parser("prepare-to-predict", help="prepare data for prediction")
+    p6.add_argument('--features_file', type=str, default='features.txt', help='output features file')
+    p6.add_argument('--sample_phased', type=str, default='sample.bgl.phased', help='sample phased on the reference panel')
+    p6.add_argument('--output', type=str, default='to_predict.txt', help='output file for prediction')
+
+    p7 = subparsers.add_parser("predict", help="predicted using the trained model")
+    p7.add_argument('--config_file', type=str, default='config.yaml', help='the config file for model and training parameters')
+    p7.add_argument('--model_name', type=str, default='mlp', help='the model name defined in the config file')
+    p7.add_argument('--pred_file', type=str, default='to_predict.txt', help='input dataset file for prediction')
+    p7.add_argument('--maps_file', type=str, default='maps.txt', help='the maps file from preprocessing step')
+    p7.add_argument('--epoch', type=int, default=99, help='the epoch of the trained model to be used for prediction')
+    p7.add_argument('--output', type=str, default='hla_predicted.txt', help='output prediction file')
 
     p11 = subparsers.add_parser("format-output", help="format the output to allele table")
     p11.add_argument('--input', type=str, default='data/1958BC_Euro.bgl.phased', help='input file')
@@ -114,6 +119,9 @@ def main():
     elif args.command == 'test':
         trainer = Trainer(config_file=args.config_file, model_name=args.model_name, test_file=args.test_file)
         trainer.test(epoch=args.epoch, maps_file=args.maps_file)
+    elif args.command == 'prepare-to-predict':
+        dp = DataPreprocessor()
+        dp.prepare_to_predict(sample_phased=args.sample_phased, features_file=args.features_file, out_file=args.output)
     elif args.command == 'predict':
         trainer = Trainer(config_file=args.config_file, model_name=args.model_name)
         trainer.predict(pred_file=args.pred_file, epoch=args.epoch, out_file=args.output, maps_file=args.maps_file)
