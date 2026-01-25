@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -88,6 +89,59 @@ class CNNBackbone(nn.Module):
         x = x.squeeze(-1)     # (B, C)
         return x
 
+class ResidualBlock(nn.Module):
+    def __init__(self, N, W, D):
+        super().__init__()
+        self.bn1 = nn.BatchNorm1d(N)
+        self.bn2 = nn.BatchNorm1d(N)
+        self.conv1 = nn.Conv1d(N, N, W, dilation=D, padding='same')
+        self.conv2 = nn.Conv1d(N, N, W, dilation=D, padding='same')
+    def forward(self, x):
+        out = self.bn1(x)
+        out = torch.relu(out)
+        out = self.conv1(out)
+        out = self.bn2(out)
+        out = torch.relu(out)
+        out = self.conv2(out)
+        out = out + x
+        return(out)
+
+class SpliceAIBackbone(torch.nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+        self.conv1 = nn.Conv1d(cfg.in_channels, cfg.out_channels, 1)
+        self.conv2 = nn.Conv1d(cfg.out_channels, cfg.out_channels, 1)
+        self.resblocks = nn.ModuleList()
+        self.convs = nn.ModuleList()
+        for i in range(len(cfg.NWD)):
+            n,w,d = cfg.NWD[i]
+            self.resblocks.append(ResidualBlock(n, w, d))
+            if (i+1)%cfg.n_blocks == 0:
+                self.convs.append(nn.Conv1d(cfg.out_channels, cfg.out_channels, 1))
+
+        if cfg.global_pool == "avg":
+            self.pool = nn.AdaptiveAvgPool1d(1)
+        elif cfg.global_pool == "max":
+            self.pool = nn.AdaptiveMaxPool1d(1)
+        else:
+            raise ValueError("global_pool must be 'avg' or 'max'")
+        self.output_dim = cfg.out_channels
+
+    def forward(self, x):
+        out = self.conv1(x)
+        skip = self.conv2(out)
+        for i in range(len(self.cfg.NWD)):
+            n,w,d = self.cfg.NWD[i]
+            out = self.resblocks[i](out)
+            j = 0
+            if (i+1)%self.cfg.n_blocks == 0:
+                cv = self.convs[j](out)
+                skip = cv + skip
+                j += 1
+        out = self.pool(skip)
+        out = out.squeeze(-1)
+        return out
 
 class HierarchicalHLA(nn.Module):
     def __init__(self, cfg):
@@ -128,6 +182,8 @@ class HierarchicalHLA(nn.Module):
             backbone_class = MLPBackbone
         elif cfg.backbone == 'cnn':
             backbone_class = CNNBackbone
+        elif cfg.backbone == 'spliceai':
+            backbone_class = SpliceAIBackbone
 
         if not self.moe:
             if cfg.backbone == 'mlp':
@@ -148,6 +204,8 @@ class HierarchicalHLA(nn.Module):
                     use_batchnorm=cfg.use_batchnorm,
                     global_pool=cfg.global_pool,
                 )
+            elif cfg.backbone == 'spliceai':
+                self.backbone = backbone_class(cfg)
             self.heads = nn.ModuleDict({head:nn.Linear(self.backbone.output_dim, (self.maps[head][0] + 1) * 2) for head in self.maps})
         else:
             self.experts = nn.ModuleDict()
@@ -171,6 +229,8 @@ class HierarchicalHLA(nn.Module):
                         use_batchnorm=cfg.use_batchnorm,
                         global_pool=cfg.global_pool,
                     )
+                elif cfg.backbone == 'spliceai':
+                    expert = backbone_class(cfg)
                 self.experts[e] = expert
             self.heads = nn.ModuleDict({head:nn.Linear(self.experts[self.maps[head][-1]].output_dim, (self.maps[head][0] + 1) * 2) for head in self.maps})
 

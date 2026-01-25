@@ -74,6 +74,8 @@ class Config:
         for k, v in config.items():
             if k in ['learning_rate', 'weight_decay']:
                 v = float(v)
+            elif k in ['NWD']:
+                v = eval(v)
             setattr(self, k, v)
 
 class EarlyStopping:

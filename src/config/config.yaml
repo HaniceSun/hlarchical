@@ -19,6 +19,25 @@ models:
     params:
       backbone: cnn
       input_channels: 2
+      hidden_dims: [128, 64]
+      kernel_sizes: [64, 64]
+      strides: [1, 1]
+      dropout: 0.3
+      use_batchnorm: true
+      global_pool: 'avg'  # 'avg' or 'max'
+      learning_rate: 1e-4
+      weight_decay: 0.01
+      early_stopping: false
+      maps_file: 'maps.txt'
+      masks_file: 'masks.txt'
+      moe: true
+      ground_truth_gated_loss: false
+      gated_loss_lambda: 0.5
+  cnn-2:
+    class: HierarchicalHLA
+    params:
+      backbone: cnn
+      input_channels: 2
       hidden_dims: [32, 64, 128]
       kernel_sizes: [7, 5, 3]
       strides: [1, 1, 1]
@@ -31,5 +50,22 @@ models:
       maps_file: 'maps.txt'
       masks_file: 'masks.txt'
       moe: true
+      ground_truth_gated_loss: false
+      gated_loss_lambda: 0.5
+  spliceai:
+    class: HierarchicalHLA
+    params:
+      backbone: spliceai
+      NWD: '[[32, 11, 1]] * 4'
+      in_channels: 2
+      out_channels: 32
+      n_blocks: 4
+      global_pool: 'avg'  # 'avg' or 'max'
+      learning_rate: 1e-4
+      weight_decay:  0.01
+      early_stopping: false
+      maps_file: 'maps.txt'
+      masks_file: 'masks.txt'
+      moe: false
       ground_truth_gated_loss: false
       gated_loss_lambda: 0.5
