@@ -190,6 +190,10 @@ class Array():
         df_map.to_csv(f'{out_file}.map', sep='\t', header=False, index=False)
 
     def phase_using_beagle(self, ref_bed='HAPMAP_CEU', ref_ped='HLA_REF', sample_bed='GDA', chrom='6', n_burnin=10, n_iter=50):
+        '''
+        not tested yet
+        '''
+
         ref_hla = 'HAPMAP_CEU_HLA_REF'
         sample_phased = f'{sample_bed}_phased'
         L = []
