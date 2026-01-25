@@ -125,6 +125,106 @@ class Array():
             df.to_csv(out_file, header=True, index=False, sep='\t')
             print('Formatted output saved to', out_file)
 
+    def make_ped_map_hla_ref(self, hla_ped='HAPMAP_CEU_HLA.ped', hla_pos='HLA_pos.txt', out_file='HLA_REF'):
+        D = {}
+        df = pd.read_table(hla_ped, header=None, sep='\t', dtype=str)
+        for n in range(len(self.HLA)):
+            for m in range(df.shape[0]):
+                a1 = df.iloc[m, 6 + n * 2]
+                a2 = df.iloc[m, 6 + n * 2 + 1]
+                for a in [a1, a2]:
+                    if len(a) >= 2 and len(a) < 4:
+                        a = ':'.join([self.HLA[n], a])
+                    elif len(a) >= 4 and len(a) < 6:
+                        a = ':'.join([self.HLA[n], a[0:-2], a[-2:]])
+                    elif len(a) >= 6 and  len(a) < 8:
+                        a = ':'.join([self.HLA[n], a[0:-4], a[-4:-2], a[-2:]])
+                    else:
+                        continue
+                    D[a] = True
+                    if len(a.split(':')) > 2:
+                        D[':'.join(a.split(':')[0:-1])] = True
+        L = sorted(D.keys())
+        M = np.zeros((df.shape[0], len(L) * 2), dtype=int)
+        for m in range(df.shape[0]):
+            for n in range(len(self.HLA)):
+                a1 = df.iloc[m, 6 + n * 2]
+                a2 = df.iloc[m, 6 + n * 2 + 1]
+                for k, a in enumerate([a1, a2]):
+                    if len(a) >= 2 and len(a) < 4:
+                        a = ':'.join([self.HLA[n], a])
+                    elif len(a) >= 4 and len(a) < 6:
+                        a = ':'.join([self.HLA[n], a[0:-2], a[-2:]])
+                    elif len(a) >= 6 and  len(a) < 8:
+                        a = ':'.join([self.HLA[n], a[0:-4], a[-4:-2], a[-2:]])
+                    try:
+                        j = L.index(a)
+                        M[m, j * 2 + k] = 1
+                    except ValueError:
+                        pass
+        df_ped = pd.DataFrame(M, dtype=str)
+        df_ped.columns = [f'{y}_{x}' for x in L for y in ('A0', 'A1')]
+        df_ped[df_ped == '0'] = 'A'
+        df_ped[df_ped == '1'] = 'P'
+        df_ped.index = df.index
+        df_merged = pd.merge(df.iloc[:, 0:6], df_ped, left_index=True, right_index=True)
+        df_merged.to_csv(f'{out_file}.ped', sep='\t', header=False, index=False)
+
+        D = {}
+        df = pd.read_table(hla_pos, header=None, sep='\t', dtype=str)
+        for n in range(df.shape[0]):
+            allele = df.iloc[n, 0]
+            ch = df.iloc[n, 1]
+            pos = int(df.iloc[n, 2])
+            D[allele] = [ch, pos]
+        M = []
+        A = {}
+        shift = {}
+        for allele in L:
+            a = allele.split(':')[0]
+            shift.setdefault(a, 0)
+            ch, pos = D.get(a, ['0', 0])
+            M.append([ch, allele, '0', pos + shift[a]])
+            shift[a] += 1
+        df_map = pd.DataFrame(M)
+        df_map.to_csv(f'{out_file}.map', sep='\t', header=False, index=False)
+
+    def phase_using_beagle(self, ref_bed='HAPMAP_CEU', ref_ped='HLA_REF', sample_bed='GDA', chrom='6', n_burnin=10, n_iter=50):
+        ref_hla = 'HAPMAP_CEU_HLA_REF'
+        sample_phased = f'{sample_bed}_phased'
+        L = []
+        cmd = f'plink2 --bfile {ref_bed} --export vcf bgz --out {ref_bed}'
+        L.append(cmd)
+        cmd = f'bcftools index {ref_bed}.vcf.gz'
+        L.append(cmd)
+        cmd = f'bcftools query -l {ref_bed}.vcf.gz > _ref_samples.txt'
+        L.append(cmd)
+
+        cmd = f'plink2 --pedmap {ref_ped} --export vcf bgz --out {ref_ped}'
+        L.append(cmd)
+        cmd = f'bcftools sort {ref_bed}.vcf.gz -Oz -o {ref_bed}.vcf.gz'
+        L.append(cmd)
+        cmd = f'bcftools view -S ref_samples.txt {ref_ped}.vcf.gz -Oz -o {ref_ped}.vcf.gz'
+        L.append(cmd)
+
+        cmd = f'bcftools index {ref_ped}.vcf.gz'
+        L.append(cmd)
+        cmd = f'bcftools concat {ref_bed}.vcf.gz {ref_ped}.vcf.gz -Oz -o {ref_hla}.vcf.gz'
+        L.append(cmd)
+        cmd = f'bcftools sort {ref_hla}.vcf.gz -Oz -o {ref_hla}.vcf.gz'
+        L.append(cmd)
+        cmd = f'bcftools index {ref_hla}.vcf.gz'
+        L.append(cmd)
+        cmd = f'plink2 --bfile {sample_bed} -chr {chrom} --export vcf bgz --out {sample_bed}'
+        L.append(cmd)
+        cmd = f'beagle gt={ref_hla}.vcf.gz out={ref_hla}_phased burnin={n_burnin} iterations={n_iter}'
+        L.append(cmd)
+        cmd = f'beagle gt={sample_bed}.vcf.gz ref={ref_hla}_phased.vcf.gz out={sample_phased}'
+        L.append(cmd)
+
+        for cmd in L:
+            print(cmd)
+            subprocess.run(cmd, shell=True, check=True)
 
 if __name__ == "__main__":
     ar = Array()
