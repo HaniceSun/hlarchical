@@ -281,6 +281,7 @@ class Trainer:
     def count_parameters(self, with_lazy=True, show_details=False):
         if with_lazy:
             X,y = next(iter(self.train_dataset))
+            X, y = X.to(self.device), y.to(self.device)
             pred = self.model.forward(X)
 
         L = []
