@@ -11,17 +11,14 @@ def get_parser():
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     p1 = subparsers.add_parser("preprocess", help="preprocess data")
-    p1.add_argument('--ref_bim', type=str, default='Pan-Asian_REF.bim', help='reference BIM file')
-    p1.add_argument('--sample_bim', type=str, default='1958BC.bim', help='sample BIM file')
+    p1.add_argument('--ref_bim', type=str, default='Pan-Asian_REF.bim', help='reference bim file')
     p1.add_argument('--ref_phased', type=str, default='Pan-Asian_REF.bgl.phased', help='reference phased file')
+    p1.add_argument('--sample_phased', type=str, default='OMNI_Pan-Asian.bgl.phased', help='sample phased file')
     p1.add_argument('--hla_renaming', type=str, default='true', help='whether to rename HLA alleles to HLA-A:01:01 format')
     p1.add_argument('--expert_by', type=str, default='ld', help='expert by gene or by ld')
     p1.add_argument('--expert_flank', type=int, default=500000, help='flanking size for experts')
 
-    p1.add_argument('--id_by', type=str, default='rs', help='whether to make features by rsID or position')
-    p1.add_argument('--check_alleles', type=str, default='true', help='whether to check alleles between reference and sample')
-    p1.add_argument('--subset_sample_bim', type=str, default=None, help='subset sample BIM file to the HLA region')
-
+    p1.add_argument('--subset_bim', type=str, default=None, help='subset bim file to the HLA region')
     p1.add_argument('--features_file', type=str, default='features.txt', help='output features file')
     p1.add_argument('--labels_file', type=str, default='labels.txt', help='output labels file')
     p1.add_argument('--maps_file', type=str, default='maps.txt', help='output maps file')
@@ -58,8 +55,8 @@ def get_parser():
     p5.add_argument('--maps_file', type=str, default='maps.txt', help='the maps file from preprocessing step')
 
     p6 = subparsers.add_parser("prepare-to-predict", help="prepare data for prediction")
+    p6.add_argument('--sample_phased', type=str, default='OMNI_Pan-Asian.bgl.phased', help='sample phased file')
     p6.add_argument('--features_file', type=str, default='features.txt', help='output features file')
-    p6.add_argument('--sample_phased', type=str, default='sample.bgl.phased', help='sample phased on the reference panel')
     p6.add_argument('--output', type=str, default='to_predict.txt', help='output file for prediction')
 
     p7 = subparsers.add_parser("predict", help="predicted using the trained model")
@@ -95,14 +92,13 @@ def main():
     args = parser.parse_args()
     if args.command == 'preprocess':
         hla_renaming = args.hla_renaming.lower() in ('true', '1', 'yes')
-        check_alleles = args.check_alleles.lower() in ('true', '1', 'yes')
-        subset_sample_bim=args.subset_sample_bim
-        if subset_sample_bim is not None:
-            subset_sample_bim = subset_sample_bim.replace('-', ':').split(':')
+        subset_bim=args.subset_bim
+        if subset_bim is not None:
+            subset_bim = subset_bim.replace('-', ':').split(':')
 
-        dp = DataPreprocessor(ref_bim=args.ref_bim, sample_bim=args.sample_bim, ref_phased=args.ref_phased,
+        dp = DataPreprocessor(ref_bim=args.ref_bim, ref_phased=args.ref_phased, sample_phased=args.sample_phased,
                               hla_renaming=hla_renaming, expert_by=args.expert_by)
-        dp.make_features(id_by=args.id_by, check_alleles=check_alleles, subset_sample_bim=subset_sample_bim)
+        dp.make_features(subset_bim=subset_bim, out_file=args.features_file)
         dp.make_labels(out_file=args.labels_file, maps_file=args.maps_file)
         dp.make_masks(out_file=args.masks_file, features_file=args.features_file, flank=args.expert_flank)
     elif args.command == 'torch-dataset':
@@ -120,8 +116,8 @@ def main():
         trainer = Trainer(config_file=args.config_file, model_name=args.model_name, test_file=args.test_file)
         trainer.test(epoch=args.epoch, maps_file=args.maps_file)
     elif args.command == 'prepare-to-predict':
-        dp = DataPreprocessor()
-        dp.prepare_to_predict(sample_phased=args.sample_phased, features_file=args.features_file, out_file=args.output)
+        dp = DataPreprocessor(sample_phased=args.sample_phased)
+        dp.prepare_to_predict(features_file=args.features_file, out_file=args.output)
     elif args.command == 'predict':
         trainer = Trainer(config_file=args.config_file, model_name=args.model_name)
         trainer.predict(pred_file=args.pred_file, epoch=args.epoch, out_file=args.output, maps_file=args.maps_file)

@@ -2,38 +2,46 @@ import numpy as np
 import pandas as pd
 
 class DataPreprocessor:
-    def __init__(self, ref_bim='Pan-Asian_REF.bim', sample_bim='1958BC.bim', ref_phased='Pan-Asian_REF.bgl.phased', hla_filter=['HLA'], non_hla_filter=['HLA'], hla_renaming=True, expert_by='ld'):
-        self.ref_bim = pd.read_table(ref_bim, header=None, sep='\t')
-        self.ref_phased = pd.read_table(ref_phased, header=None, sep=' ')
-        self.sample_bim = pd.read_table(sample_bim, header=None, sep='\t')
+    def __init__(self, ref_bim='Pan-Asian_REF.bim', ref_phased='Pan-Asian_REF.bgl.phased', sample_phased='OMNI_Pan-Asian.bgl.phased', label_filter=['HLA'], feature_filter=['rs'], hla_renaming=True, expert_by='ld'):
+        self.label_filter = label_filter
+        self.feature_filter = feature_filter
+        self.expert_by = expert_by
 
+        self.ref_bim = pd.read_table(ref_bim, header=None, sep='\t')
         bim_cols = ['chrom', 'id', 'cm', 'pos', 'A1', 'A2']
         self.ref_bim.columns = [f'{x}_ref' for x in bim_cols]
-        self.sample_bim.columns = [f'{x}_sample' for x in bim_cols]
 
+        self.ref_phased = pd.read_table(ref_phased, header=None, sep=' ')
+        self.ref_ids = list(self.ref_phased[self.ref_phased[1] == 'id'].iloc[0, 2::2])
         cols = list(self.ref_phased.columns)
-        cols[0] = 'I'
+        cols[0] = 'I_ref'
         cols[1] = 'id_ref'
         for i in range(2, self.ref_phased.shape[1], 2):
-            cols[i] = f'A1_s{i//2}'
-            cols[i + 1] = f'A2_s{i//2}'
+            cols[i] = f'A1_{self.ref_ids[i//2 - 1]}'
+            cols[i + 1] = f'A2_{self.ref_ids[i//2 - 1]}'
         self.ref_phased.columns = cols
+
+        self.sample_phased = pd.read_table(sample_phased, header=None, sep=' ')
+        self.sample_ids = list(self.sample_phased[self.sample_phased[1] == 'id'].iloc[0, 2::2])
+        cols = list(self.sample_phased.columns)
+        cols[0] = 'I_sample'
+        cols[1] = 'id_sample'
+        for i in range(2, self.sample_phased.shape[1], 2):
+            cols[i] = f'A1_{self.sample_ids[i//2 - 1]}'
+            cols[i + 1] = f'A2_{self.sample_ids[i//2 - 1]}'
+        self.sample_phased.columns = cols
 
         # Extract HLA for labels
         wh = []
         for n in range(self.ref_phased.shape[0]):
             id_ref = self.ref_phased['id_ref'].iloc[n]
             flag = False
-            for hf in hla_filter:
-                if str(id_ref).find(hf) != -1:
+            for flt in label_filter:
+                if str(id_ref).find(flt) != -1:
                     flag = True
                     break
             wh.append(flag)
         self.ref_phased_hla = self.ref_phased[wh].copy()
-
-        self.hla_filter = hla_filter
-        self.non_hla_filter = non_hla_filter
-        self.expert_by = expert_by
 
         self.hla_renaming = hla_renaming
         if hla_renaming:
@@ -43,10 +51,10 @@ class DataPreprocessor:
         wh = []
         for n in range(self.ref_phased.shape[0]):
             id_ref = self.ref_phased['id_ref'].iloc[n]
-            flag = True
-            for nhf in non_hla_filter:
-                if str(id_ref).find(nhf) != -1:
-                    flag = False
+            flag = False
+            for flt in feature_filter:
+                if str(id_ref).find(flt) != -1:
+                    flag = True
                     break
             wh.append(flag)
         self.ref_phased_non_hla = self.ref_phased[wh].copy()
@@ -66,54 +74,46 @@ class DataPreprocessor:
         self.expert_groups['E2'] = ['HLA-DPA1', 'HLA-DPB1']
         self.expert_groups['E3'] = ['HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def make_features(self, id_by='rs', check_alleles=True, subset_sample_bim=None, out_file='features.txt'):
-        # Subset sample bim to the HLA region
-        if subset_sample_bim is not None:
+    def make_features(self, subset_bim=None, out_file='features.txt'):
+        # Subset bim to the HLA region
+        if subset_bim is not None:
             wh = []
-            for n in range(self.sample_bim.shape[0]):
+            for n in range(self.ref_bim.shape[0]):
                 flag = False
-                ch = self.sample_bim['chrom_sample'].iloc[n]
-                pos = self.sample_bim['pos_sample'].iloc[n]
-                if str(ch) == str(subset_sample_bim[0]):
-                    if pos < subset_sample_bim[2] and pos > subset_sample_bim[1]:
+                ch = self.ref_bim['chrom_ref'].iloc[n]
+                pos = self.ref_bim['pos_ref'].iloc[n]
+                if str(ch) == str(subset_bim[0]):
+                    if pos < subset_bim[2] and pos > subset_bim[1]:
                         flag = True
                         break
                 wh.append(flag)
-            self.sample_bim = self.sample_bim[wh]
-            print(f"Subsetted sample bim to the region: {subset_sample_bim}")
+            self.ref_bim = self.ref_bim[wh]
+            print(f"Subsetted ref bim to the region: {subset_bim}")
 
-        # Get shared variants between reference and sample
-        if id_by == 'rs':
-            df = pd.merge(self.ref_bim, self.sample_bim, left_on='id_ref', right_on='id_sample')
-        elif id_by == 'pos':
-            df = pd.merge(self.ref_bim, self.sample_bim, left_on=['chrom_ref', 'pos_ref'], right_on=['chrom_sample', 'pos_sample'])
-        else:
-            raise ValueError("Either 'rs' or 'pos' can be used for id_by")
+        df = pd.merge(self.ref_bim, self.ref_phased_non_hla, on='id_ref')
+        wh = df['id_ref'].isin(self.sample_phased['id_sample'])
+        df = df[wh]
 
-        if check_alleles:
-            wh = (df['A1_ref'] == df['A1_sample']) & (df['A2_ref'] == df['A2_sample'])
-            df = df[wh]
-
-        # Merge with phased data
-        df = pd.merge(df, self.ref_phased_non_hla, on='id_ref') 
         L = []
         L.append(df[['id_ref', 'pos_ref']])
         for col in df.columns:
             col2 = str(col)
             if (col2.startswith('A1_') or col2.startswith('A2_')) and col2.find('_ref') == -1 and col2.find('_sample') == -1:
-                d = {col:(df[col]==df['A1_ref']).astype(int)}
+                col3 = df[col]
+                if isinstance(col3, pd.DataFrame):
+                    col3 = col3.iloc[:,0]
+                d = {col:(col3==df['A1_ref']).astype(int)}
                 L.append( pd.DataFrame(d))
         df = pd.concat(L, axis=1)
         df = df.sort_values(by='pos_ref').reset_index(drop=True)
         print('processed feature data before transpose:')
-        print(df)
         print(f'features data saved to {out_file}')
 
         M = np.zeros((int(df.shape[1]/2 - 1), df.shape[0] * 2), dtype=int)
         H = []
         S = []
         for n in range(2, df.shape[1], 2):
-            S.append(df.columns[n].split('_')[-1])
+            S.append(df.columns[n].split('A1_')[-1].split('A2_')[-1])
             for m in range(df.shape[0]):
                 id_ref = df['id_ref'].iloc[m]
                 pos_ref = df['pos_ref'].iloc[m]
@@ -142,7 +142,7 @@ class DataPreprocessor:
             H.append(f"A2_{h}")
         M = np.zeros((int(self.ref_phased_hla.shape[1]/2 - 1), n_heads), dtype=int)
         for n in range(2, self.ref_phased_hla.shape[1], 2):
-            S.append(self.ref_phased_hla.columns[n].split('_')[-1])
+            S.append(self.ref_phased_hla.columns[n].split('A1_')[-1].split('A2_')[-1])
             for j in range(2):
                 variants = self.ref_phased_hla.loc[self.ref_phased_hla.iloc[:, n + j] == 'P', 'id_ref'].values
                 df_sub = self.maps[self.maps['allele'].isin(variants)]
@@ -236,8 +236,8 @@ class DataPreprocessor:
         for n in range(self.ref_bim.shape[0]):
             id_ref = self.ref_bim['id_ref'].iloc[n]
             flag = False
-            for hf in self.hla_filter:
-                if str(id_ref).find(hf) != -1:
+            for flt in self.label_filter:
+                if str(id_ref).find(flt) != -1:
                     flag = True
                     break
             wh.append(flag)
@@ -265,7 +265,7 @@ class DataPreprocessor:
                             positions += H[g]
                 start_end_dict[gene] = (min(positions), max(positions))
 
-        features = pd.read_table(features_file, header=0, sep='\t')
+        features = pd.read_table(features_file, header=0, sep='\t', low_memory=False)
         L = []
         E = []
         for gene in start_end_dict:
@@ -319,8 +319,8 @@ class DataPreprocessor:
         df = df[df['id_ref'] != '.'].copy()
         return df
 
-    def prepare_to_predict(self, sample_phased='sample.bgl.phased', features_file='features.txt', out_file='to_predict.txt'):
-        df_features = pd.read_table(features_file, header=0, sep='\t')
+    def prepare_to_predict(self, features_file='features.txt', out_file='to_predict.txt'):
+        df_features = pd.read_table(features_file, header=0, sep='\t', low_memory=False)
         features = []
         for n in range(1, df_features.shape[1], 2):
             fields = df_features.columns[n].split('_')
@@ -328,24 +328,13 @@ class DataPreprocessor:
             if k not in features:
                 features.append(k)
 
-
-        sample_phased = pd.read_table(sample_phased, header=None, sep=' ')
-        samples = list(sample_phased[sample_phased[1] == 'id'].iloc[0, 2::2])
-        cols = list(sample_phased.columns)
-        cols[0] = 'I'
-        cols[1] = 'id_sample'
-        for i in range(2, sample_phased.shape[1], 2):
-            cols[i] = f'A1_{samples[i//2 - 1]}'
-            cols[i + 1] = f'A2_{samples[i//2 - 1]}'
-        sample_phased.columns = cols
-
-        df = pd.merge(self.ref_bim, sample_phased, left_on='id_ref', right_on='id_sample')
+        df = pd.merge(self.ref_bim, self.sample_phased, left_on='id_ref', right_on='id_sample')
         wh = df['id_ref'].isin(features)
         df = df[wh]
         if df.shape[0] != len(features):
             print('Warning: some features are missing in the sample phased data')
 
-        M = np.zeros((len(samples), len(features) * 2), dtype=int)
+        M = np.zeros((len(self.sample_ids), len(features) * 2), dtype=int)
         H = []
         idx_start = 8
         for n in range(idx_start, df.shape[1], 2):
@@ -359,7 +348,7 @@ class DataPreprocessor:
                         H.append(f'A2_{id_ref}')
 
         df = pd.DataFrame(M)
-        df.index = samples
+        df.index = self.sample_ids
         df.index.name = 'sample'
         df.columns = H
         df.to_csv(out_file, sep='\t', index=True, header=True)
