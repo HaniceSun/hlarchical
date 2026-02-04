@@ -13,9 +13,9 @@ dependencies:
   - PyYAML=6.0.3
   - scikit-learn=1.8.0
   - joblib=1.5.1
+  - bcftools
+  - bcftools-liftover-plugin
   - pip
   - pip:
       - -r requirements.txt
-      - torch
-      - torchmetrics
       - -e . 
