@@ -77,13 +77,17 @@ def get_parser():
     p12.add_argument('--input', type=str, default='1958BC', help='input file prefix')
     p12.add_argument('--ref', type=str, default='HM_CEU_REF', help='reference panel prefix, can be HM_CEU_REF or Pan-Asian_REF currently')
 
-    p13 = subparsers.add_parser("run-deephla", help="run CNN-based DEEP*HLA, to be implemented")
-    p13.add_argument('--mode', type=str, default='train', help='mode: train or impute')
-    p13.add_argument('--input', type=str, default='1958BC_Pan-Asian_REF', help='input file prefix')
-    p13.add_argument('--ref', type=str, default='Pan-Asian_REF', help='reference panel prefix, can be HM_CEU_REF or Pan-Asian_REF currently')
-    p13.add_argument('--subset', type=str, default=None, help='subset the input to the HLA regions according to the reference genome, e.g., chr6:28510120-33480577 on GRCh37')
-    p13.add_argument('--model_json', type=str, default='Pan-Asian_REF.model.json', help='the config file of the model')
-    p13.add_argument('--model_dir', type=str, default='model', help='the output directory of the trained model')
+    p13 = subparsers.add_parser("run-hibag", help="run HIBAG on array data")
+    p13.add_argument('--input', type=str, default='1958BC', help='input file prefix')
+    p13.add_argument('--ref', type=str, default='European', help='reference panel prefix, can be European, Asian, African, or Hispanic currently')
+
+    p14 = subparsers.add_parser("run-deephla", help="run CNN-based DEEP*HLA, to be implemented")
+    p14.add_argument('--mode', type=str, default='train', help='mode: train or impute')
+    p14.add_argument('--input', type=str, default='1958BC_Pan-Asian_REF', help='input file prefix')
+    p14.add_argument('--ref', type=str, default='Pan-Asian_REF', help='reference panel prefix, can be HM_CEU_REF or Pan-Asian_REF currently')
+    p14.add_argument('--subset', type=str, default=None, help='subset the input to the HLA regions according to the reference genome, e.g., chr6:28510120-33480577 on GRCh37')
+    p14.add_argument('--model_json', type=str, default='Pan-Asian_REF.model.json', help='the config file of the model')
+    p14.add_argument('--model_dir', type=str, default='model', help='the output directory of the trained model')
 
     return parser
 
@@ -128,6 +132,9 @@ def main():
     elif args.command == 'run-snp2hla':
         ar = Array()
         ar.run_snp2hla(in_file=args.input, ref_file=args.ref)
+    elif args.command == 'run-hibag':
+        ar = Array()
+        ar.run_hibag(in_file=args.input, ref_file=args.ref)
     elif args.command == 'run-deephla':
         ar = Array()
         ar.run_deephla(mode=args.mode, in_file=args.input, ref_file=args.ref, subset=args.subset,
