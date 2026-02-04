@@ -9,7 +9,7 @@ class Preprocessor:
         self.hla_chrom = ['6', 'chr6']
         self.ped_cols = ['FID', 'IID', 'PID', 'MID', 'SEX', 'PHENOTYPE'] + [f'{x}_{a}' for x in self.HLA for a in ['A1', 'A2']]
 
-    def bed_to_vcf(self, in_file='HAPMAP_CEU.bed'):
+    def bed_to_vcf(self, in_file='HAPMAP_CEU.bed', input_genome_build='hg18', output_genome_build='GRCh37'):
         bfile = in_file.split('.bed')[0]
         cmd = f'plink2 --bfile {bfile} --recode vcf bgz --out {bfile}'
         subprocess.run(cmd, shell=True)
@@ -19,10 +19,36 @@ class Preprocessor:
         subprocess.run(cmd, shell=True)
         cmd = f'bcftools view -S {samples_sorted} {bfile}.vcf.gz -Oz -o {bfile}_sampleSorted.vcf.gz; rm {bfile}.vcf.gz'
         subprocess.run(cmd, shell=True)
-        cmd = f'bcftools sort {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}.vcf.gz; rm {bfile}_sampleSorted.vcf.gz; bcftools index {bfile}.vcf.gz'
+        fasta_source = self.get_genome_reference(genome_build=input_genome_build)
+        fasta_dest = self.get_genome_reference(genome_build=output_genome_build)
+        cmd = f'bcftools norm -m-any --check-ref s -f {fasta_source} {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}_norm.vcf.gz'
         subprocess.run(cmd, shell=True)
+        if input_genome_build != output_genome_build:
+            self.vcf_liftover(f'{bfile}_sampleSorted.vcf.gz', out_file=f'{bfile}_lifted.vcf.gz', input_genome_build=input_genome_build, output_genome_build=output_genome_build)
+            cmd = f'bcftools sort {bfile}_lifted.vcf.gz -Oz -o {bfile}_posSorted.vcf.gz; bcftools index {bfile}_posSorted.vcf.gz'
+            subprocess.run(cmd, shell=True)
+            os.remove(f'{bfile}_lifted.vcf.gz')
+        else:
+            cmd = f'bcftools sort {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}_posSorted.vcf.gz; bcftools index {bfile}_posSorted.vcf.gz'
+            subprocess.run(cmd, shell=True)
+        cmd = f'bcftools norm -m-any --check-ref s -f {fasta_dest} {bfile}_posSorted.vcf.gz -Oz -o {bfile}.vcf.gz'
+        subprocess.run(cmd, shell=True)
+        os.remove(f'{bfile}_sampleSorted.vcf.gz')
+        os.remove(f'{bfile}_posSorted.vcf.gz')
+        os.remove(f'{bfile}_norm.vcf.gz')
 
-    def ped_to_vcf(self, in_file='HAPMAP_CEU_HLA.ped', genome_build='hg18', hla_pos_file='HLA_gene_position.txt'):
+    def vcf_liftover(self, in_file, out_file, input_genome_build='hg18', output_genome_build='GRCh37'):
+        if input_genome_build in ['hg18', 'NCBI36'] and output_genome_build in ['GRCh37', 'hg19']:
+            chain_url = 'http://ftp.ensembl.org/pub/assembly_mapping/homo_sapiens/NCBI36_to_GRCh37.chain.gz'
+            chain_file = chain_url.split('/')[-1]
+            if os.path.exists(chain_file) == False:
+                subprocess.run(f'wget {chain_url}', shell=True)
+            fasta_source = self.get_genome_reference(genome_build=input_genome_build)
+            fasta_dest = self.get_genome_reference(genome_build=output_genome_build)
+            cmd = f'bcftools +liftover -Ou {in_file} -- -s {fasta_source} -f {fasta_dest} -c {chain_file} | bcftools sort -Oz -o {out_file}'
+            subprocess.run(cmd, shell=True)
+
+    def ped_to_vcf(self, in_file='HAPMAP_CEU_HLA.ped', genome_build='GRCh37', hla_pos_file='HLA_gene_position.txt'):
         hla_pos_file = hla_pos_file.split('.txt')[0] + f'_{genome_build}.txt'
         if os.path.exists(hla_pos_file) == False:
             self.get_hla_position(out_file=hla_pos_file, genome_build=genome_build)
@@ -123,18 +149,31 @@ class Preprocessor:
         print(cmd)
         subprocess.run(cmd, shell=True)
 
-    def get_genome_reference(self, genome_build='GRCh38'):
+    def phase_sample(self, sample_file='GDA.vcf.gz', ref_file='HAPMAP_CEU_REF_phased.vcf.gz', out_file='GDA_phased_HAPMAP_CEU_REF.vcf.gz', sample_build='GRCh37', ref_build='GRCh37'):
+        bfile = sample_file.split('.vcf')[0].split('.bed')[0]
+        if sample_file.endswith('.bed'):
+            cmd = f'plink2 --bfile {bfile} --chr 6 --recode vcf bgz --out {bfile}'
+            subprocess.run(cmd, shell=True)
+        if sample_build == ref_build:
+            fasta_file = self.get_genome_reference(genome_build=sample_build)
+            cmd = f'bcftools norm -m-any --check-ref s -f {fasta_file} {bfile}.vcf.gz -Oz -o {bfile}_norm.vcf.gz'
+            subprocess.run(cmd, shell=True)
+            cmd = f'beagle gt={bfile}_norm.vcf.gz ref={ref_file} out={out_file.split(".vcf.gz")[0]}'
+            subprocess.run(cmd, shell=True)
+            os.remove(f'{bfile}_norm.vcf.gz')
+
+    def get_genome_reference(self, genome_build='GRCh37'):
         if genome_build in ['GRCh38', 'hg38']:
             fasta_url = 'ftp://ftp.ensembl.org/pub/release-101/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz'
         elif genome_build in ['GRCh37', 'hg19']:
             fasta_url = 'ftp://ftp.ensembl.org/pub/release-75/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa.gz'
         elif genome_build in ['GRCh36', 'hg18', 'NCBI36']:
             fasta_url = 'ftp://ftp.ensembl.org/pub/release-54/fasta/homo_sapiens/dna/Homo_sapiens.NCBI36.54.dna.toplevel.fa.gz'
-        self.fasta_file = fasta_url.split('/')[-1].split('.gz')[0]
+        fasta_file = fasta_url.split('/')[-1].split('.gz')[0]
         files = os.listdir('.')
-        if self.fasta_file not in files:
-            subprocess.run(f'wget {fasta_url}; gunzip {self.fasta_file}.gz', shell=True)
-        print(self.fasta_file)
+        if fasta_file not in files:
+            subprocess.run(f'wget {fasta_url}; gunzip {fasta_file}.gz', shell=True)
+        return fasta_file
 
     def get_hla_position(self, out_file, genome_build='GRCh38'):
         D = {}
@@ -225,3 +264,4 @@ if __name__ == '__main__':
     pp.bed_to_vcf()
     pp.ped_to_vcf()
     pp.make_reference()
+    pp.phase_sample(sample_file='GDA.bed')
