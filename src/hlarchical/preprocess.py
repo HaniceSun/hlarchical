@@ -136,8 +136,6 @@ class Preprocessor:
             outfile.write('##contig=<ID=6>\n')
             outfile.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
         df.to_csv(out_file, sep='\t', index=False, mode='a')
-        print(df)
-        print(out_file)
 
         samples_sorted = f'{bfile}_samples_sorted.txt'
         cmd = f'bcftools query -l {out_file} | sort > {samples_sorted}'
@@ -160,7 +158,7 @@ class Preprocessor:
         cmd = f'bcftools sort {bfile}_PosUniq.vcf.gz -Oz -o {concated_file}; rm {bfile}_PosUniq.vcf.gz; bcftools index {concated_file}'
         print(cmd)
         subprocess.run(cmd, shell=True)
-        cmd = f'beagle gt={concated_file} out={out_file} burnin={burnin} iterations={iterations}'
+        cmd = f'beagle gt={concated_file} out={out_file.split(".vcf")[0]} burnin={burnin} iterations={iterations}'
         print(cmd)
         subprocess.run(cmd, shell=True)
         os.remove(concated_file)
@@ -177,7 +175,7 @@ class Preprocessor:
             cmd = f'bcftools norm -m-any --check-ref s -f {fasta_file} {bfile}.vcf.gz -Oz -o {bfile}_norm.vcf.gz'
             print(cmd)
             subprocess.run(cmd, shell=True)
-            cmd = f'beagle gt={bfile}_norm.vcf.gz ref={ref_file} out={out_file.split(".vcf.gz")[0]}'
+            cmd = f'beagle gt={bfile}_norm.vcf.gz ref={ref_file} out={out_file.split(".vcf")[0]}'
             print(cmd)
             subprocess.run(cmd, shell=True)
             #os.remove(f'{bfile}_norm.vcf.gz')
