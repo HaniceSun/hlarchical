@@ -1,5 +1,7 @@
 import argparse
-from .preprocess import DataPreprocessor
+from .preprocess import Preprocessor
+from .process import Processor
+
 from .dataset import CustomDataset
 from .trainer import Trainer
 from .utils import *
@@ -11,18 +13,21 @@ def get_parser():
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     p1 = subparsers.add_parser("preprocess", help="preprocess data")
-    p1.add_argument('--ref_bim', type=str, default='Pan-Asian_REF.bim', help='reference bim file')
-    p1.add_argument('--ref_phased', type=str, default='Pan-Asian_REF.bgl.phased', help='reference phased file')
-    p1.add_argument('--sample_phased', type=str, default='OMNI_Pan-Asian.bgl.phased', help='sample phased file')
-    p1.add_argument('--hla_renaming', type=str, default='true', help='whether to rename HLA alleles to HLA-A:01:01 format')
-    p1.add_argument('--expert_by', type=str, default='ld', help='expert by gene or by ld')
-    p1.add_argument('--expert_flank', type=int, default=500000, help='flanking size for experts')
+    p1.add_argument('--ref_bed', type=str, default='HAPMAP_CEU.bed', help='reference genotyping data')
+    p1.add_argument('--ref_ped', type=str, default='HAPMAP_CEU_HLA.ped', help='reference HLA typing data')
+    p1.add_argument('--ref_genome_build', type=str, default='hg18', help='input genome build of the reference panel')
+    p1.add_argument('--target_genome_build', type=str, default='hg19', help='output genome build of the reference panel')
+    p1.add_argument('--sample_file', type=str, default='GDA.vcf.gz', help='sample genotyping data in vcf or bed format')
+    p1.add_argument('--sample_genome_build', type=str, default='hg19', help='input genome build of the sample data')
+    p1.add_argument('--ref_phased_file', type=str, default='HAPMAP_CEU_REF_Phased.vcf.gz', help='output phased reference panel file')
+    p1.add_argument('--sample_phased_file', type=str, default='GDA_HAPMAP_CEU_REF_Phased.vcf.gz', help='output phased sample file')
 
-    p1.add_argument('--subset_bim', type=str, default=None, help='subset bim file to the HLA region')
-    p1.add_argument('--features_file', type=str, default='features.txt', help='output features file')
-    p1.add_argument('--labels_file', type=str, default='labels.txt', help='output labels file')
-    p1.add_argument('--maps_file', type=str, default='maps.txt', help='output maps file')
-    p1.add_argument('--masks_file', type=str, default='masks.txt', help='output masks file')
+    p2 = subparsers.add_parser("process", help="process data")
+    p2.add_argument('--subset_bim', type=str, default=None, help='subset bim file to the HLA region')
+    p2.add_argument('--features_file', type=str, default='features.txt', help='output features file')
+    p2.add_argument('--labels_file', type=str, default='labels.txt', help='output labels file')
+    p2.add_argument('--maps_file', type=str, default='maps.txt', help='output maps file')
+    p2.add_argument('--masks_file', type=str, default='masks.txt', help='output masks file')
 
     p2 = subparsers.add_parser("torch-dataset", help="generate torch datasets")
     p2.add_argument('--features_file', type=str, default='features.txt', help='input features file')
@@ -77,9 +82,10 @@ def get_parser():
     p12.add_argument('--input', type=str, default='1958BC', help='input file prefix')
     p12.add_argument('--ref', type=str, default='HM_CEU_REF', help='reference panel prefix, can be HM_CEU_REF or Pan-Asian_REF currently')
 
-    p13 = subparsers.add_parser("run-hibag", help="run HIBAG on array data")
+    p13 = subparsers.add_parser("run-hibag", help="run HIBAG on array data, HIBAG package should be installed in R environment")
     p13.add_argument('--input', type=str, default='1958BC', help='input file prefix')
     p13.add_argument('--ref', type=str, default='European', help='reference panel prefix, can be European, Asian, African, or Hispanic currently')
+    p13.add_argument('--R', type=str, default='R4.5', help='conda R environment name where HIBAG is installed')
 
     p14 = subparsers.add_parser("run-deephla", help="run CNN-based DEEP*HLA, to be implemented")
     p14.add_argument('--mode', type=str, default='train', help='mode: train or impute')
@@ -95,16 +101,17 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     if args.command == 'preprocess':
-        hla_renaming = args.hla_renaming.lower() in ('true', '1', 'yes')
-        subset_bim=args.subset_bim
-        if subset_bim is not None:
-            subset_bim = subset_bim.replace('-', ':').split(':')
+        pp = Preprocessor()
+        pp.bed_to_vcf(in_file=args.ref_bed, input_genome_build=args.ref_genome_build, output_genome_build=args.target_genome_build)
+        pp.ped_to_vcf(in_file=args.ref_ped, genome_build=args.target_genome_build)
+        pp.make_reference(in_file=[args.ref_bed.replace('.bed', '.vcf.gz'), args.ref_ped], out_file=args.ref_phased_file)
+        pp.phase_sample(sample_file=args.sample_file, ref_file=args.ref_phased_file, out_file=args.sample_phased_file, sample_build=args.sample_genome_build, ref_build=args.target_genome_build)
 
-        dp = DataPreprocessor(ref_bim=args.ref_bim, ref_phased=args.ref_phased, sample_phased=args.sample_phased,
-                              hla_renaming=hla_renaming, expert_by=args.expert_by)
-        dp.make_features(subset_bim=subset_bim, out_file=args.features_file)
-        dp.make_labels(out_file=args.labels_file, maps_file=args.maps_file)
-        dp.make_masks(out_file=args.masks_file, features_file=args.features_file, flank=args.expert_flank)
+    elif args.command == 'process':
+        pc = Processor()
+        pc.make_features(subset_bim=subset_bim, out_file=args.features_file)
+        pc.make_labels(out_file=args.labels_file, maps_file=args.maps_file)
+        pc.make_masks(out_file=args.masks_file, features_file=args.features_file, flank=args.expert_flank)
     elif args.command == 'torch-dataset':
         ds = CustomDataset(features_file=args.features_file, labels_file=args.labels_file, maps_file=args.maps_file)
         split_ratio = [float(x) for x in args.split_ratio.split(',')]
@@ -134,7 +141,7 @@ def main():
         ar.run_snp2hla(in_file=args.input, ref_file=args.ref)
     elif args.command == 'run-hibag':
         ar = Array()
-        ar.run_hibag(in_file=args.input, ref_file=args.ref)
+        ar.run_hibag(in_file=args.input, ref=args.ref, R=args.R)
     elif args.command == 'run-deephla':
         ar = Array()
         ar.run_deephla(mode=args.mode, in_file=args.input, ref_file=args.ref, subset=args.subset,

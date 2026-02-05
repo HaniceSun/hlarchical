@@ -151,7 +151,7 @@ class Preprocessor:
 
     def phase_sample(self, sample_file='GDA.vcf.gz', ref_file='HAPMAP_CEU_REF_phased.vcf.gz', out_file='GDA_phased_HAPMAP_CEU_REF.vcf.gz', sample_build='GRCh37', ref_build='GRCh37'):
         bfile = sample_file.split('.vcf')[0].split('.bed')[0]
-        if sample_file.endswith('.bed'):
+        if sample_file.find('.vcf') == -1:
             cmd = f'plink2 --bfile {bfile} --chr 6 --recode vcf bgz --out {bfile}'
             subprocess.run(cmd, shell=True)
         if sample_build == ref_build:

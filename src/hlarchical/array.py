@@ -29,13 +29,13 @@ class Array():
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
         subprocess.run(cmd, shell=True, check=True)
 
-    def run_hibag(self, in_file='1958BC', ref='European'):
+    def run_hibag(self, in_file='1958BC', ref='European', R='R4.5'):
         hibag_script = f'{resources.files("hlarchical").parent.parent}/vendor/HIBAG/hibag.R'
         ref_file = f'{ref}-HLA4-hg19.RData'
         if not os.path.exists(ref_file):
             cmd = f'wget https://hibag.s3.amazonaws.com/download/hlares_param/{ref_file}'
             subprocess.run(cmd, shell=True, check=True)
-        cmd = f'conda run -n R4.5 Rscript {hibag_script} {in_file} {ref}'
+        cmd = f'conda run -n {R} Rscript {hibag_script} {in_file} {ref_file}'
         subprocess.run(cmd, shell=True, check=True)
 
     def run_deephla(self, mode='train', in_file='1958BC_Pan-Asian_REF', ref_file='Pan-Asian_REF', subset=[], model_json=None, model_dir='model', deephla_dir=None):
@@ -85,19 +85,19 @@ class Array():
             subprocess.run(cmd, shell=True, check=True)
 
     def format_output(self, in_file='1958BC_Euro.bgl.phased', fam='1958BC_Euro.fam', out_file='1958BC_Euro_digit4.txt', digit=4, from_tool='snp2hla'):
-        if from_tool == 'snp2hla':
-            sep = ' '
-            skiprows = 1
-            col = 1
-            in_header = 0
-        elif from_tool == 'deephla':
-            sep = '\t'
-            skiprows = 0
-            col = 0
-            in_header = None
-            samples = pd.read_table(in_file.replace('.deephla.phased', '.fam'), sep=' ', header=None).iloc[:, 1].tolist()
-
         if in_file.endswith('.phased'):
+            if from_tool == 'snp2hla':
+                sep = ' '
+                skiprows = 1
+                col = 1
+                in_header = 0
+            elif from_tool == 'deephla':
+                sep = '\t'
+                skiprows = 0
+                col = 0
+                in_header = None
+                samples = pd.read_table(in_file.replace('.deephla.phased', '.fam'), sep=' ', header=None).iloc[:, 1].tolist()
+
             df = pd.read_table(in_file, sep=sep, skiprows=skiprows, header=in_header)
             df = df.loc[df.iloc[:, col].str.startswith('HLA'), ]
 
@@ -133,6 +133,21 @@ class Array():
             df.columns = header
             df.to_csv(out_file, header=True, index=False, sep='\t')
             print('Formatted output saved to', out_file)
+
+        elif from_tool == 'hibag':
+            df = pd.read_table(in_file, header=0, sep='\t')
+            df_out = pd.DataFrame()
+            df_out['SampleID'] = df['sample.id']
+            df_out['HLA'] = df['HLA']
+            if digit == 2:
+                df_out['Allele1'] = df['HLA'] + ':' + df['allele1'].str.split(':').str[0]
+                df_out['Allele2'] = df['HLA'] + ':' + df['allele2'].str.split(':').str[0]
+            elif digit == 4:
+                df_out['Allele1'] = df['HLA'] + ':' + df['allele1']
+                df_out['Allele2'] = df['HLA'] + ':' + df['allele2']
+            df_out.to_csv(out_file, sep='\t', index=False, header=True)
+            print('Formatted output saved to', out_file)
+
 
 if __name__ == "__main__":
     ar = Array()
