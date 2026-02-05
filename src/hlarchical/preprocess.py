@@ -12,26 +12,33 @@ class Preprocessor:
     def bed_to_vcf(self, in_file='HAPMAP_CEU.bed', input_genome_build='hg18', output_genome_build='GRCh37'):
         bfile = in_file.split('.bed')[0]
         cmd = f'plink2 --bfile {bfile} --recode vcf bgz --out {bfile}'
+        print(cmd)
         subprocess.run(cmd, shell=True)
 
         samples_sorted = f'{bfile}_samples_sorted.txt'
         cmd = f'bcftools query -l {bfile}.vcf.gz | sort > {samples_sorted}'
+        print(cmd)
         subprocess.run(cmd, shell=True)
         cmd = f'bcftools view -S {samples_sorted} {bfile}.vcf.gz -Oz -o {bfile}_sampleSorted.vcf.gz; rm {bfile}.vcf.gz'
+        print(cmd)
         subprocess.run(cmd, shell=True)
         fasta_source = self.get_genome_reference(genome_build=input_genome_build)
         fasta_dest = self.get_genome_reference(genome_build=output_genome_build)
         cmd = f'bcftools norm -m-any --check-ref s -f {fasta_source} {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}_norm.vcf.gz'
+        print(cmd)
         subprocess.run(cmd, shell=True)
         if input_genome_build != output_genome_build:
             self.vcf_liftover(f'{bfile}_sampleSorted.vcf.gz', out_file=f'{bfile}_lifted.vcf.gz', input_genome_build=input_genome_build, output_genome_build=output_genome_build)
             cmd = f'bcftools sort {bfile}_lifted.vcf.gz -Oz -o {bfile}_posSorted.vcf.gz; bcftools index {bfile}_posSorted.vcf.gz'
+            print(cmd)
             subprocess.run(cmd, shell=True)
             os.remove(f'{bfile}_lifted.vcf.gz')
         else:
             cmd = f'bcftools sort {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}_posSorted.vcf.gz; bcftools index {bfile}_posSorted.vcf.gz'
+            print(cmd)
             subprocess.run(cmd, shell=True)
         cmd = f'bcftools norm -m-any --check-ref s -f {fasta_dest} {bfile}_posSorted.vcf.gz -Oz -o {bfile}.vcf.gz'
+        print(cmd)
         subprocess.run(cmd, shell=True)
         os.remove(f'{bfile}_sampleSorted.vcf.gz')
         os.remove(f'{bfile}_posSorted.vcf.gz')
@@ -46,6 +53,7 @@ class Preprocessor:
             fasta_source = self.get_genome_reference(genome_build=input_genome_build)
             fasta_dest = self.get_genome_reference(genome_build=output_genome_build)
             cmd = f'bcftools +liftover -Ou {in_file} -- -s {fasta_source} -f {fasta_dest} -c {chain_file} | bcftools sort -Oz -o {out_file}'
+            print(cmd)
             subprocess.run(cmd, shell=True)
 
     def ped_to_vcf(self, in_file='HAPMAP_CEU_HLA.ped', genome_build='GRCh37', hla_pos_file='HLA_gene_position.txt'):
@@ -128,39 +136,51 @@ class Preprocessor:
             outfile.write('##contig=<ID=6>\n')
             outfile.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
         df.to_csv(out_file, sep='\t', index=False, mode='a')
+        print(df)
+        print(out_file)
 
         samples_sorted = f'{bfile}_samples_sorted.txt'
-        cmd = f'bcftools query -l {bfile}.vcf | sort > {samples_sorted}'
-        subprocess.run(cmd, shell=True)
-        cmd = f'bcftools view -S {samples_sorted} {bfile}.vcf -Oz -o {bfile}_sampleSorted.vcf.gz; rm {bfile}.vcf'
-        subprocess.run(cmd, shell=True)
-        cmd = f'bcftools sort {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}.vcf.gz; rm {bfile}_sampleSorted.vcf.gz; bcftools index {bfile}.vcf.gz'
-        subprocess.run(cmd, shell=True)
-
-    def make_reference(self, in_file=['HAPMAP_CEU.vcf.gz', 'HAPMAP_CEU_HLA.vcf.gz'], maker_file=None, out_file='HAPMAP_CEU_REF.vcf.gz', burnin=10, iterations=15):
-        cmd = f'bcftools concat {" ".join(in_file)} -Oz -o {out_file}'
-        subprocess.run(cmd, shell=True)
-        self.vcf_pos_unique(out_file)	
-        bfile = out_file.split('.vcf.gz')[0]
-        cmd = f'bcftools sort {bfile}_PosUniq.vcf.gz -Oz -o {out_file}; rm {bfile}_PosUniq.vcf.gz; bcftools index {bfile}.vcf.gz'
-        subprocess.run(cmd, shell=True)
-
-        cmd = f'beagle gt={out_file} out={bfile}_phased burnin={burnin} iterations={iterations}'
+        cmd = f'bcftools query -l {out_file} | sort > {samples_sorted}'
         print(cmd)
         subprocess.run(cmd, shell=True)
+        cmd = f'bcftools view -S {samples_sorted} {out_file} -Oz -o {bfile}_sampleSorted.vcf.gz; rm {out_file}'
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+        cmd = f'bcftools sort {bfile}_sampleSorted.vcf.gz -Oz -o {bfile}.vcf.gz; rm {bfile}_sampleSorted.vcf.gz; bcftools index {bfile}.vcf.gz'
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+
+    def make_reference(self, in_file=['HAPMAP_CEU.vcf.gz', 'HAPMAP_CEU_HLA.vcf.gz'], maker_file=None, out_file='HAPMAP_CEU_REF_phased.vcf.gz', burnin=10, iterations=15):
+        concated_file = out_file.split('_phased')[0] + '_concated.vcf.gz'
+        cmd = f'bcftools concat {" ".join(in_file)} -Oz -o {concated_file}'
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+        self.vcf_pos_unique(concated_file)	
+        bfile = concated_file.split('.vcf.gz')[0]
+        cmd = f'bcftools sort {bfile}_PosUniq.vcf.gz -Oz -o {concated_file}; rm {bfile}_PosUniq.vcf.gz; bcftools index {concated_file}'
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+        cmd = f'beagle gt={concated_file} out={out_file} burnin={burnin} iterations={iterations}'
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+        os.remove(concated_file)
+        os.remove(f'{concated_file}.csi')
 
     def phase_sample(self, sample_file='GDA.vcf.gz', ref_file='HAPMAP_CEU_REF_phased.vcf.gz', out_file='GDA_phased_HAPMAP_CEU_REF.vcf.gz', sample_build='GRCh37', ref_build='GRCh37'):
         bfile = sample_file.split('.vcf')[0].split('.bed')[0]
         if sample_file.find('.vcf') == -1:
             cmd = f'plink2 --bfile {bfile} --chr 6 --recode vcf bgz --out {bfile}'
+            print(cmd)
             subprocess.run(cmd, shell=True)
         if sample_build == ref_build:
             fasta_file = self.get_genome_reference(genome_build=sample_build)
             cmd = f'bcftools norm -m-any --check-ref s -f {fasta_file} {bfile}.vcf.gz -Oz -o {bfile}_norm.vcf.gz'
+            print(cmd)
             subprocess.run(cmd, shell=True)
             cmd = f'beagle gt={bfile}_norm.vcf.gz ref={ref_file} out={out_file.split(".vcf.gz")[0]}'
+            print(cmd)
             subprocess.run(cmd, shell=True)
-            os.remove(f'{bfile}_norm.vcf.gz')
+            #os.remove(f'{bfile}_norm.vcf.gz')
 
     def get_genome_reference(self, genome_build='GRCh37'):
         if genome_build in ['GRCh38', 'hg38']:

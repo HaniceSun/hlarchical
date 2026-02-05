@@ -102,9 +102,9 @@ def main():
     args = parser.parse_args()
     if args.command == 'preprocess':
         pp = Preprocessor()
-        pp.bed_to_vcf(in_file=args.ref_bed, input_genome_build=args.ref_genome_build, output_genome_build=args.target_genome_build)
-        pp.ped_to_vcf(in_file=args.ref_ped, genome_build=args.target_genome_build)
-        pp.make_reference(in_file=[args.ref_bed.replace('.bed', '.vcf.gz'), args.ref_ped], out_file=args.ref_phased_file)
+        #pp.bed_to_vcf(in_file=args.ref_bed, input_genome_build=args.ref_genome_build, output_genome_build=args.target_genome_build)
+        #pp.ped_to_vcf(in_file=args.ref_ped, genome_build=args.target_genome_build)
+        #pp.make_reference(in_file=[args.ref_bed.replace('.bed', '.vcf.gz'), args.ref_ped.replace('.ped', '.vcf.gz')], out_file=args.ref_phased_file)
         pp.phase_sample(sample_file=args.sample_file, ref_file=args.ref_phased_file, out_file=args.sample_phased_file, sample_build=args.sample_genome_build, ref_build=args.target_genome_build)
 
     elif args.command == 'process':
