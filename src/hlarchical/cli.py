@@ -19,8 +19,8 @@ def get_parser():
     p1.add_argument('--target_genome_build', type=str, default='hg19', help='output genome build of the reference panel')
     p1.add_argument('--sample_file', type=str, default='GDA.vcf.gz', help='sample genotyping data in vcf or bed format')
     p1.add_argument('--sample_genome_build', type=str, default='hg19', help='input genome build of the sample data')
-    p1.add_argument('--ref_phased_file', type=str, default='HAPMAP_CEU_REF_Phased.vcf.gz', help='output phased reference panel file')
-    p1.add_argument('--sample_phased_file', type=str, default='GDA_HAPMAP_CEU_REF_Phased.vcf.gz', help='output phased sample file')
+    p1.add_argument('--ref_phased_file', type=str, default='HAPMAP_CEU_REF_phased.vcf.gz', help='output phased reference panel file')
+    p1.add_argument('--sample_phased_file', type=str, default='GDA_HAPMAP_CEU_REF_phased.vcf.gz', help='output phased sample file')
 
     p2 = subparsers.add_parser("process", help="process data")
     p2.add_argument('--subset_bim', type=str, default=None, help='subset bim file to the HLA region')
