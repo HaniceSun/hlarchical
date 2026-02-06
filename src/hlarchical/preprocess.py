@@ -56,6 +56,38 @@ class Preprocessor:
             print(cmd)
             subprocess.run(cmd, shell=True)
 
+    def get_ped(self, in_file='HAPMAP_CEU_HLA.ped', out_file='HAPMAP_CEU_HLA_fixed.ped', fmt='snp2hla', fam_file=None):
+        if fmt == 'snp2hla':
+            pass
+        elif fmt == '1000G':
+            df = pd.read_table(in_file, header=0, sep='\t')
+            if fam_file:
+                df_fam = pd.read_table(fam_file, header=None, sep='\t')
+            df_ped = pd.DataFrame()
+            df_ped['FID'] = df['Sample ID']
+            df_ped['IID'] = df['Sample ID']
+            df_ped['PID'] = '.'
+            df_ped['MID'] = '.'
+            df_ped['SEX'] = '.'
+            df_ped['PHENOTYPE'] = '.'
+            for gene in self.HLA:
+                for a in ['1', '2']:
+                    k = f'{gene}_A{a}'
+                    k2 = f'{gene} {a}'
+                    if k2 in df.columns:
+                        L = []
+                        for x in df[k2]:
+                            a = '.'
+                            x = str(x)
+                            if x.find('/') == -1 and x.find('*') == -1:
+                                if x.find(':') != -1:
+                                    a = x
+                            L.append(a)
+                        df_ped[k] = L
+                    else:
+                        df_ped[k] = '.'
+            df_ped.to_csv(out_file, sep='\t', index=False, header=True)
+
     def ped_to_vcf(self, in_file='HAPMAP_CEU_HLA.ped', genome_build='GRCh37', hla_pos_file='HLA_gene_position.txt'):
         hla_pos_file = hla_pos_file.split('.txt')[0] + f'_{genome_build}.txt'
         if os.path.exists(hla_pos_file) == False:
@@ -87,25 +119,17 @@ class Preprocessor:
             D.setdefault(k, {})
             for gene in self.HLA:
                 for a in ['A1', 'A2']:
+                    allele2d = '.'
+                    allele4d = '.'
                     allele = row[f'{gene}_{a}']
-                    if allele == '0':
-                        allele2d = '.'
-                        allele4d = '.'
-                    elif len(allele) < 4:
-                        allele2d = f'{gene}:{allele}'
-                        allele4d = '.'
-                    elif len(allele) == 4:
-                        allele2d = f'{gene}:{allele[0:-2]}'
-                        allele4d = f'{gene}:{allele[0:-2]}:{allele[-2:]}'
-                    elif len(allele) == 5:
-                        allele2d = f'{gene}:{allele[0:-3]}'
-                        allele4d = f'{gene}:{allele[0:-3]}:{allele[-3:]}'
-                    D[k].setdefault(a, [])
-                    D[k][a].append(allele2d)
-                    D[k][a].append(allele4d)
-                    if allele2d != '.':
+                    if alele not in ['.', './.', '0', 'NA']:
+                        alleles = allele.split(':')
+                        allele2d = f'{gene}:{alleles[0]}'
+                        allele4d = f'{gene}:{alleles[0]}:{allele[1]}'
+                        D[k].setdefault(a, [])
+                        D[k][a].append(allele2d)
+                        D[k][a].append(allele4d)
                         A.append(allele2d)
-                    if allele4d != '.':
                         A.append(allele4d)
 
         L = []

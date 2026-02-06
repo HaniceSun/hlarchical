@@ -9,11 +9,11 @@ class Array():
     def __init__(self):
         self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def run_snp2hla(self, in_file='1958BC', ref_file='HM_CEU_REF', snp2hla_dir=None, heap_size=2000, window_size=1000):
+    def run_snp2hla(self, in_file='1958BC', ref_file='HM_CEU_REF', out_file='1958BC_European_SNP2HLA', snp2hla_dir=None, heap_size=2000, window_size=1000):
         if not snp2hla_dir:
             snp2hla_dir = f'{resources.files("hlarchical").parent.parent}/vendor/SNP2HLA/home'
 
-        out_file = os.path.abspath(f'{in_file}_{ref_file}')
+        out_file = os.path.abspath(out_file)
 
         if os.path.exists(f'{in_file}.bed'):
             in_file = os.path.abspath(in_file)
@@ -27,15 +27,17 @@ class Array():
 
         os.chdir(snp2hla_dir)
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
+        print(cmd)
         subprocess.run(cmd, shell=True, check=True)
 
-    def run_hibag(self, in_file='1958BC', ref='European', R='R4.5'):
+    def run_hibag(self, in_file='1958BC', ref='European', out_file='1958BC_European_HIBAG', Renv='R4.5'):
         hibag_script = f'{resources.files("hlarchical").parent.parent}/vendor/HIBAG/hibag.R'
         ref_file = f'{ref}-HLA4-hg19.RData'
         if not os.path.exists(ref_file):
             cmd = f'wget https://hibag.s3.amazonaws.com/download/hlares_param/{ref_file}'
             subprocess.run(cmd, shell=True, check=True)
-        cmd = f'conda run -n {R} Rscript {hibag_script} {in_file} {ref_file}'
+        cmd = f'conda run -n {Renv} Rscript {hibag_script} {in_file} {ref_file} {out_file}'
+        print(cmd)
         subprocess.run(cmd, shell=True, check=True)
 
     def run_deephla(self, mode='train', in_file='1958BC_Pan-Asian_REF', ref_file='Pan-Asian_REF', subset=[], model_json=None, model_dir='model', deephla_dir=None):
@@ -65,6 +67,7 @@ class Array():
             if not os.path.exists(hla_json):
                 print('Generating HLA info JSON file...')
                 cmd = f'conda run -n DEEP-HLA python {deephla_dir}/make_hlainfo.py --ref {ref_file} --out {ref_file}.hla.json'
+                print(cmd)
                 subprocess.run(cmd, shell=True, check=True)
 
             if not model_json:
@@ -73,6 +76,7 @@ class Array():
                 model_json = model_json.split('.model.json')[0]
                 hla_json = hla_json.split('.hla.json')[0]
                 cmd = f'conda run -n DEEP-HLA python {deephla_dir}/train.py --ref {ref_file} --sample {in_file} --model {model_json} --hla {hla_json} --model-dir {model_dir}'
+                print(cmd)
                 subprocess.run(cmd, shell=True, check=True)
             else:
                 raise FileNotFoundError(f'{model_json} not found')
