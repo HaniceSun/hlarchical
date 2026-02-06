@@ -61,10 +61,10 @@ class Preprocessor:
         if fam_file:
             df_fam = pd.read_table(fam_file, header=None, sep=' ')
         if fmt == 'snp2hla':
-            df = pd.read_table(in_file, header=None, sep='\t', dtype=str)
-            df.columns = self.ped_cols
-            for col in df.columns[6:]:
-                L = df[col]
+            df_ped = pd.read_table(in_file, header=None, sep='\t', dtype=str)
+            df_ped.columns = self.ped_cols
+            for col in df_ped.columns[6:]:
+                L = df_ped[col]
                 for n in range(len(L)):
                     x = str(L[n])
                     if len(x) < 4 and x != '0':
@@ -76,10 +76,10 @@ class Preprocessor:
                     else:
                         x = '.'
                     L[n] = x
-                df[col] = L
+                df_ped[col] = L
             if df_fam.shape[0]:
-                df = df.loc[df['IID'].isin(df_fam[1])]
-            df.to_csv(out_file, sep='\t', index=False, header=True)
+                df_ped = df_ped.loc[df_ped['IID'].isin(df_fam[1])]
+            df_ped.to_csv(out_file, sep='\t', index=False, header=True)
         elif fmt == '1000G':
             df = pd.read_table(in_file, header=0, sep='\t', dtype=str)
             df_ped = pd.DataFrame()
@@ -106,7 +106,7 @@ class Preprocessor:
                     else:
                         df_ped[k] = '.'
             if df_fam.shape[0]:
-                df = df.loc[df['IID'].isin(df_fam[1])]
+                df_ped = df_ped.loc[df_ped['IID'].isin(df_fam[1])]
             df_ped.to_csv(out_file, sep='\t', index=False, header=True)
 
     def ped_to_vcf(self, in_file='HAPMAP_CEU_HLA.ped', genome_build='GRCh37', hla_pos_file='HLA_gene_position.txt'):
