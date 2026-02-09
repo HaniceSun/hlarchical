@@ -131,7 +131,7 @@ class Array():
                         allele2[k].append(':'.join([k] + fields[2:]))
 
                 for hla in self.HLA:
-                    L.append([sample_id, hla, ','.join(allele1.get(hla, 'X')), ','.join(allele2.get(hla, 'X'))])
+                    L.append([sample_id, hla, ','.join(allele1.get(hla, '.')), ','.join(allele2.get(hla, '.'))])
 
             df = pd.DataFrame(L)
             df.columns = header
@@ -149,9 +149,191 @@ class Array():
             elif digit == 4:
                 df_out['Allele1'] = df['HLA'] + ':' + df['allele1']
                 df_out['Allele2'] = df['HLA'] + ':' + df['allele2']
+            df_out.sort_values(by=['SampleID', 'HLA'], inplace=True)
             df_out.to_csv(out_file, sep='\t', index=False, header=True)
             print('Formatted output saved to', out_file)
 
+        elif from_tool == 'hlatyping':
+            # internal use only
+            df = pd.read_excel(in_file, dtype=str, skiprows=2)
+            header = ['SampleID', 'Race', 'Gender', 'Disease', 'HLA', 'Allele1', 'Allele2']
+        
+            HLAidx = {}
+            HLAidx['HLA-A'] = list(df.columns).index('IMGT/A')
+            HLAidx['HLA-B'] = list(df.columns).index('IMGT/B')
+            HLAidx['HLA-C'] = list(df.columns).index('IMGT/C')
+            HLAidx['HLA-DPA1'] = list(df.columns).index('IMGT/DPA1')
+            HLAidx['HLA-DPB1'] = list(df.columns).index('IMGT/DPB1')
+            HLAidx['HLA-DQA1'] = list(df.columns).index('IMGT/DQA1')
+            HLAidx['HLA-DQB1'] = list(df.columns).index('IMGT/DQB1')
+            HLAidx['HLA-DRB1'] = list(df.columns).index('IMGT/DRB1')
+        
+            L = []
+            for n in range(0, df.shape[0], 2):
+                sample_id = df.iloc[n, 0]
+                race = df.iloc[n, 1]
+                gender = df.iloc[n, 2].lower().strip()
+                disease = df.iloc[n, 3].lower().strip()
+        
+                for k in HLAidx.keys():
+                    hla = k
+                    allele1 = df.iloc[n, HLAidx[k]]
+                    allele2 = df.iloc[n + 1, HLAidx[k]]
+                    if str(allele1) == 'nan':
+                        allele1 = '.'
+                    if str(allele2) == 'nan':
+                        allele2 = '.'
+                    if allele1 not in ['.', 'X']:
+                        allele1 = f'{hla}:{allele1}'
+                    if allele2 not in ['.', 'X']:
+                        allele2 = f'{hla}:{allele2}'
+                    L.append([sample_id, race, gender, disease, hla, allele1, allele2])
+
+            df = pd.DataFrame(L)
+            df.columns = header
+            df.to_csv(out_file, header=True, index=False, sep='\t')
+
+    def merge_outputs(self, ancestry_file='GAP_OMNI_GDA.txt', out_file='HLA_OMNI_GDA.txt', digits=[2, 4],
+                      tools=['SNP2HLA', 'HIBAG'], Ancestry=['European', 'Asian', 'African', 'Hispanic'], Array=['GDA', 'OMNI']):
+        D = {}
+        A = {}
+        for digit in digits:
+            D.setdefault(digit, {})
+            for tool in tools:
+                D[digit].setdefault(tool, {})
+                for ancestry in Ancestry:
+                    D[digit][tool].setdefault(ancestry, {})
+                    for array in Array:
+                        in_file = f'{array}_{ancestry}_{tool}_digit{digit}.txt'
+                        if os.path.exists(in_file):
+                            df = pd.read_csv(in_file, sep='\t', header=0)
+                            for i, row in df.iterrows():
+                                sample_id = row['SampleID']
+                                if array == 'OMNI':
+                                    sample_id = '-'.join(sample_id.split('-')[1:])
+                                A[sample_id] = array
+                                hla = row['HLA']
+                                allele1 = row['Allele1']
+                                allele2 = row['Allele2']
+                                k = (sample_id, hla)
+                                D[digit][tool][ancestry][k] = (allele1, allele2)
+    
+        df = pd.read_table(ancestry_file, header=0, sep='\t')
+        Ls = []
+        cols = ['SampleID', 'Superpopulation', 'Population', 'Array', 'HLA']
+        for n in range(df.shape[0]):
+            sample_id = df['SampleID'].iloc[n]
+            superpopulation = df['Superpopulation'].iloc[n]
+            population = df['Population'].iloc[n]
+            array = A.get(sample_id, '.')
+            if superpopulation in ['EAS', 'SAS']:
+                ancestry = 'Asian'
+            elif superpopulation in ['EUR']:
+                ancestry = 'European'
+            elif superpopulation in ['AFR']:
+                ancestry = 'African'
+            elif superpopulation in ['AMR']:
+                ancestry = 'Hispanic'
+            else:
+                ancestry = 'European'
+    
+            for hla in self.HLA:
+                L = [sample_id, superpopulation, population, array, hla]
+                for digit in digits:
+                    for tool in tools:
+                        if n == 0 and hla == self.HLA[0]:
+                            cols += [f'Allele1_{tool}_digit{digit}', f'Allele2_{tool}_digit{digit}']
+    
+                        if tool == 'SNP2HLA':
+                            if ancestry in ['Asian', 'European']:
+                                pass
+                            else:
+                                ancestry = 'European'
+    
+                        k = (sample_id, hla)
+                        allele1, allele2 = ['.', '.']
+                        if ancestry in D[digit][tool]:
+                            if k in D[digit][tool][ancestry]:
+                                allele1, allele2 = D[digit][tool][ancestry][k]
+                        L += [allele1, allele2]
+                Ls.append(L)
+        df = pd.DataFrame(Ls)
+        df.columns = cols
+        df.to_csv(out_file, sep='\t', index=False)
+
+    def hla_typing_genotyping_scoring(self, in_file):
+        out_file = in_file.replace('.txt', '_score.txt')
+        out_file_overall = in_file.replace('.txt', '_score_overall.txt')
+        out_file_ancestry = in_file.replace('.txt', '_score_ancestry.txt')
+        df = pd.read_table(in_file, header=0, sep='\t')
+        Ls = []
+        cols = df.columns.tolist()
+        for n in range(df.shape[0]):
+            L = df.iloc[n, :].tolist()
+            for m in range(11, df.shape[1], 2):
+                digit = int(df.columns[m][-1])
+                typ_a1 = df['Allele1_typing'].iloc[n]
+                typ_a2 = df['Allele2_typing'].iloc[n]
+                if typ_a1 not in ['.', 'X']:
+                    typ_a1 = ':'.join(typ_a1.split(':')[0:int(digit/2)+1])
+                    typ_a2 = ':'.join(typ_a2.split(':')[0:int(digit/2)+1])
+                geno_a1 = df.iloc[n, m]
+                geno_a2 = df.iloc[n, m + 1]
+                t, g = self._cal_score(typ_a1, typ_a2, geno_a1, geno_a2)
+                L.append(f'{g}/{t}')
+                if n == 0:
+                    cols.append(df.columns[m].replace('Allele1', 'score'))
+            Ls.append(L)
+        df = pd.DataFrame(Ls) 
+        df.columns = cols
+        df.to_csv(out_file, sep='\t', index=False, header=True)
+
+        score_idx = []
+        for n in range(df.shape[1]):
+            if df.columns[n].startswith('score_'):
+                score_idx.append(n)
+
+        # overall score for each HLA	
+        L = []
+        for hla in df['HLA'].unique():
+            df2 = df.loc[df['HLA'] == hla]
+            for idx in score_idx:
+                score_sum = df2.iloc[:, idx].apply(lambda x: int(x.split('/')[0])).sum()
+                total_sum = df2.iloc[:, idx].apply(lambda x: int(x.split('/')[1])).sum()
+                L.append([hla, df.columns[idx].replace('score_', ''), f'{score_sum/total_sum:4f}', score_sum, total_sum])
+        df_overall = pd.DataFrame(L)
+        df_overall.columns = ['HLA', 'method', 'score', 'genotyping', 'typing']
+        df_overall.to_csv(out_file_overall, sep='\t', index=False, header=True)
+
+        # per ancestry score for each HLA
+        L = []
+        for hla in df['HLA'].unique():
+            df2 = df.loc[df['HLA'] == hla]
+            for ancestry in df2['Superpopulation'].unique():
+                df3 = df2.loc[df2['Superpopulation'] == ancestry]
+                for idx in score_idx:
+                    score_sum = df3.iloc[:, idx].apply(lambda x: int(x.split('/')[0])).sum()
+                    total_sum = df3.iloc[:, idx].apply(lambda x: int(x.split('/')[1])).sum()
+                    L.append([hla, ancestry, df.columns[idx].replace('score_', ''), f'{score_sum/total_sum:4f}', score_sum, total_sum])
+        df_ancestry = pd.DataFrame(L)
+        df_ancestry.columns = ['HLA', 'ancestry', 'method', 'score', 'genotyping', 'typing']
+        df_ancestry.to_csv(out_file_ancestry, sep='\t', index=False, header=True)
+
+    def _cal_score(self, ta1, ta2, ga1, ga2):
+        t = 0
+        g = 0
+        for x in [ta1, ta2]:
+            if x not in ['.', 'X'] and x.find('--') == -1:
+                t += 1
+    
+        for x in [ga1, ga2]:
+            if x not in ['.', 'X']:
+                if x in [ta1, ta2]:
+                    g += 1
+        g = min(t, g)
+        if ga1 == ga2 and ta1 != ta2:
+            g = min(g, 1)
+        return t, g
 
 if __name__ == "__main__":
     ar = Array()

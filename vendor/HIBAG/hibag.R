@@ -2,9 +2,10 @@ library(HIBAG)
 args <- commandArgs(trailingOnly = TRUE)
 in_file = args[1]
 ref_file = args[2]
+out_file = args[3]
 
 HLA = c("A", "B", "C", "DRB1", "DQA1", "DQB1", "DPB1")
-hla_hibag = function(in_file, ref_file){
+hla_hibag = function(in_file, ref_file, out_file){
     model.list <- get(load(ref_file))
     dataset = hlaBED2Geno(bed.fn=paste0(in_file, ".bed"), fam.fn=paste0(in_file, ".fam"), bim.fn=paste0(in_file, ".bim"))
 
@@ -19,6 +20,6 @@ hla_hibag = function(in_file, ref_file){
     }
     df = do.call(rbind, df_list)
     ref = strsplit(ref_file, split="-HLA")[[1]][1]
-    write.table(df, file=paste0(in_file, "_HIBAG", "_", ref, ".txt"), sep="\t", quote=F, row.names=F)
+    write.table(df, file=paste0(out_file, ".txt"), sep="\t", quote=F, row.names=F)
 }
-hla_hibag(in_file, ref_file)
+hla_hibag(in_file, ref_file, out_file)

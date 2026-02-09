@@ -13,8 +13,10 @@ dependencies:
   - PyYAML=6.0.3
   - scikit-learn=1.8.0
   - joblib=1.5.1
-  - bcftools
+  - bcftools=1.22
   - bcftools-liftover-plugin
+  - beagle=5.5_27Feb25.75f
+  - openpyxl=3.1.5
   - pip
   - pip:
       - -r requirements.txt
