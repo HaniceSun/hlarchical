@@ -5,6 +5,10 @@ import subprocess
 import torch
 import shutil
 from importlib import resources
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class Array():
     def __init__(self):
@@ -26,8 +30,8 @@ class Array():
         else:
             raise FileNotFoundError(f'Reference file {ref_file}.bed not found')
 
-        # make a temporary working directory, don't use the one in the installation to avoid issues of multiple runs at the same time
-        working_dir = f'{out_file}_working_tmp'
+        # make a temporary working directory, not using the installation directory to avoid potential overwritten issues of multiple runs at the same time
+        working_dir = f'{out_file}_working'
         shutil.copytree(snp2hla_dir, working_dir)
         os.chdir(working_dir)
 
@@ -200,7 +204,7 @@ class Array():
             df.to_csv(out_file, header=True, index=False, sep='\t')
 
     def merge_outputs(self, ancestry_file='GAP_OMNI_GDA.txt', out_file='HLA_OMNI_GDA.txt', digits=[2, 4],
-                      tools=['SNP2HLA', 'HIBAG'], Ancestry=['European', 'Asian', 'African', 'Hispanic'], Array=['GDA', 'OMNI'], prioritized=['HIBAG', 'SNP2HLA']):
+                      tools=['SNP2HLA', 'HIBAG'], Ancestry=['European', 'Asian', 'African', 'Hispanic'], Array=['GDA', 'OMNI'], ensemble=['HIBAG', 'SNP2HLA']):
         D = {}
         A = {}
         for digit in digits:
@@ -213,8 +217,16 @@ class Array():
                         in_file = f'{array}_{ancestry}_{tool}_digit{digit}.txt'
                         if os.path.exists(in_file):
                             df = pd.read_csv(in_file, sep='\t', header=0)
+
+                            # assuming sample_id contains FID, if all SampleID starts with '\d-'
+                            sample_id_with_fid = df['SampleID'].str.contains(r'^\d+-', na=False).all()
+                            if sample_id_with_fid:
+                                print(f'FID is being excluded from SampleID in {in_file}', flush=True)
+
                             for i, row in df.iterrows():
                                 sample_id = row['SampleID']
+                                if sample_id_with_fid:
+                                    sample_id = '-'.join(sample_id.split('-')[1:])
                                 A[sample_id] = array
                                 hla = row['HLA']
                                 allele1 = row['Allele1']
@@ -225,8 +237,10 @@ class Array():
         df = pd.read_table(ancestry_file, header=0, sep='\t')
         Ls = []
         cols = ['SampleID', 'Superpopulation', 'Population', 'Array', 'HLA']
+
         for n in range(df.shape[0]):
             sample_id = df['SampleID'].iloc[n]
+            sample_name = df['SampleName'].iloc[n]
             superpopulation = df['Superpopulation'].iloc[n]
             population = df['Population'].iloc[n]
             array = A.get(sample_id, '.')
@@ -254,7 +268,7 @@ class Array():
                             else:
                                 ancestry = 'European'
     
-                        k = (sample_id, hla)
+                        k = (sample_name, hla)
                         allele1, allele2 = ['.', '.']
                         if ancestry in D[digit][tool]:
                             if k in D[digit][tool][ancestry]:
@@ -264,7 +278,7 @@ class Array():
         df = pd.DataFrame(Ls)
         df.columns = cols
 
-        if prioritized:
+        if ensemble:
             idx = df.columns.tolist().index('HLA')
             for digit in digits:
                 for alelle in ['Allele1', 'Allele2']:
@@ -277,13 +291,13 @@ class Array():
                     L = []
                     for n in range(df.shape[0]):
                         value = '.'
-                        for tool in prioritized:
+                        for tool in ensemble:
                             col = f'{alelle}_{tool}_digit{digit}'
                             if D[col][n] not in ['.', 'X']:
                                 value = D[col][n]
                                 break
                         L.append(value)
-                    df.insert(loc=idx, column=f'{alelle}_PRIORITIZED_digit{digit}', value=L)
+                    df.insert(loc=idx, column=f'{alelle}_ensemble_digit{digit}', value=L)
         df.to_csv(out_file, sep='\t', index=False)
 
     def hla_typing_genotyping_scoring(self, in_file):
@@ -343,6 +357,37 @@ class Array():
         df_ancestry = pd.DataFrame(L)
         df_ancestry.columns = ['HLA', 'ancestry', 'method', 'score', 'genotyping', 'typing']
         df_ancestry.to_csv(out_file_ancestry, sep='\t', index=False, header=True)
+
+    def bar_plot_score(self, in_file, digits=[2, 4], methods=['SNP2HLA', 'HIBAG', 'ensemble']):
+        df = pd.read_table(in_file, header=0, sep='\t')
+        for digit in digits:
+            for method in methods:
+                df2 = df.loc[df['method'] == f'{method}_digit{digit}']
+                df3 = df2.loc[~df2['HLA'].isin(['HLA-DPA1'])]
+                plt.figure()
+                if 'ancestry' in df2.columns:
+                    ax = sns.barplot(x='HLA', y='score', hue='ancestry', data=df2)
+                    plt.legend(bbox_to_anchor=(0.5, 0.995), loc='upper center', ncols=5)
+                else:
+                    ax = sns.barplot(x='HLA', y='score', data=df2)
+
+                score_avg = df2['genotyping'].sum() / df2['typing'].sum()
+                score_avg2 = df3['genotyping'].sum() / df3['typing'].sum()
+                txt = f'Average accuracy: {score_avg:.4f}'
+                txt2 = f'Average accuracy excluding HLA-DPA1: {score_avg2:.4f}'
+                ax.text(0.98, 0.07, txt, ha='right', va='bottom', transform=ax.transAxes, fontsize=10)
+                ax.text(0.98, 0.02, txt2, ha='right', va='bottom', transform=ax.transAxes, fontsize=10, weight='bold')
+
+                ax.set_ylim(0, 1.2)
+                ax.set_title(f'Accuracy at {digit}-digit resolution using {method}')
+                ax.set_ylabel('Score')
+                ax.set_xlabel('')
+                ax.tick_params(axis='x', rotation=90)
+                plt.tight_layout()
+                out_file = in_file.replace('.txt', f'_{method}_digit{digit}_barplot.pdf')
+                plt.savefig(out_file)
+                plt.close()
+                print('Bar plot saved to', out_file)
 
     def _cal_score(self, ta1, ta2, ga1, ga2):
         t = 0
