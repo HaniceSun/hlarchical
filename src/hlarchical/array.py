@@ -3,6 +3,7 @@ import gzip
 import pandas as pd
 import subprocess
 import torch
+import shutil
 from importlib import resources
 
 class Array():
@@ -27,7 +28,7 @@ class Array():
 
         # make a temporary working directory, don't use the one in the installation to avoid issues of multiple runs at the same time
         working_dir = f'{out_file}_working_tmp'
-        os.copytree(snp2hla_dir, working_dir)
+        shutil.copytree(snp2hla_dir, working_dir)
         os.chdir(working_dir)
 
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
