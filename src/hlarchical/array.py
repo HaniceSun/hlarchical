@@ -25,10 +25,16 @@ class Array():
         else:
             raise FileNotFoundError(f'Reference file {ref_file}.bed not found')
 
-        os.chdir(snp2hla_dir)
+        # make a temporary working directory, don't use the one in the installation to avoid issues of multiple runs at the same time
+        working_dir = f'{out_file}_working_tmp'
+        os.copytree(snp2hla_dir, working_dir)
+        os.chdir(working_dir)
+
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
         print(cmd)
         subprocess.run(cmd, shell=True, check=True)
+
+        os.remove(working_dir)
 
     def run_hibag(self, in_file='1958BC', ref='European', out_file='1958BC_European_HIBAG', Renv='R4.5'):
         hibag_script = f'{resources.files("hlarchical").parent.parent}/vendor/HIBAG/hibag.R'
@@ -209,8 +215,6 @@ class Array():
                             df = pd.read_csv(in_file, sep='\t', header=0)
                             for i, row in df.iterrows():
                                 sample_id = row['SampleID']
-                                if array == 'OMNI':
-                                    sample_id = '-'.join(sample_id.split('-')[1:])
                                 A[sample_id] = array
                                 hla = row['HLA']
                                 allele1 = row['Allele1']
