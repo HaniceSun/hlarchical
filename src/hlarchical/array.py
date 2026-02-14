@@ -34,11 +34,12 @@ class Array():
         working_dir = f'{out_file}_working'
         shutil.copytree(snp2hla_dir, working_dir)
         os.chdir(working_dir)
+        print(f'running SNP2HLA in {working_dir}', flush=True)
 
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
         print(cmd)
         subprocess.run(cmd, shell=True, check=True)
-        shutil.rmtree(working_dir)
+        #shutil.rmtree(working_dir)
 
     def run_hibag(self, in_file='1958BC', ref='European', out_file='1958BC_European_HIBAG', Renv='R4.5'):
         hibag_script = f'{resources.files("hlarchical").parent.parent}/vendor/HIBAG/hibag.R'
@@ -375,6 +376,8 @@ class Array():
                 score_avg2 = df3['genotyping'].sum() / df3['typing'].sum()
                 txt = f'Average accuracy: {score_avg:.4f}'
                 txt2 = f'Average accuracy excluding HLA-DPA1: {score_avg2:.4f}'
+                print([in_file, digit, methd, txt], flush=True)
+                print([in_file, digit, methd, txt2], flush=True)
                 ax.text(0.98, 0.07, txt, ha='right', va='bottom', transform=ax.transAxes, fontsize=10)
                 ax.text(0.98, 0.02, txt2, ha='right', va='bottom', transform=ax.transAxes, fontsize=10, weight='bold')
 
