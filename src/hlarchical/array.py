@@ -244,7 +244,7 @@ class Array():
             sample_name = df['SampleName'].iloc[n]
             superpopulation = df['Superpopulation'].iloc[n]
             population = df['Population'].iloc[n]
-            array = A.get(sample_id, '.')
+            array = A.get(sample_name, '.')
             if superpopulation in ['EAS', 'SAS']:
                 ancestry = 'Asian'
             elif superpopulation in ['EUR']:
@@ -376,8 +376,8 @@ class Array():
                 score_avg2 = df3['genotyping'].sum() / df3['typing'].sum()
                 txt = f'Average accuracy: {score_avg:.4f}'
                 txt2 = f'Average accuracy excluding HLA-DPA1: {score_avg2:.4f}'
-                print([in_file, digit, methd, txt], flush=True)
-                print([in_file, digit, methd, txt2], flush=True)
+                print([in_file, digit, method, txt], flush=True)
+                print([in_file, digit, method, txt2], flush=True)
                 ax.text(0.98, 0.07, txt, ha='right', va='bottom', transform=ax.transAxes, fontsize=10)
                 ax.text(0.98, 0.02, txt2, ha='right', va='bottom', transform=ax.transAxes, fontsize=10, weight='bold')
 
