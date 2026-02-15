@@ -388,7 +388,9 @@ class Array():
                 ax.tick_params(axis='x', rotation=90)
                 plt.tight_layout()
                 out_file = in_file.replace('.txt', f'_{method}_digit{digit}_barplot.pdf')
+                out_file2 = in_file.replace('.txt', f'_{method}_digit{digit}_barplot.png')
                 plt.savefig(out_file)
+                plt.savefig(out_file2)
                 plt.close()
                 print('Bar plot saved to', out_file)
 
