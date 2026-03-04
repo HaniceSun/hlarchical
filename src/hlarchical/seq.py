@@ -28,3 +28,18 @@ class Seq:
                 sample_id = os.path.basename(fq1).split('_subset')[0]
                 cmd = f'hlahd.sh -t {n_thresholds} -m {min_read_length} -c {trim_rate} -f {freq_data} {fq1} {fq2} {gene_split_file} {dict_file} {sample_id} {out_dir}'
                 outfile.write(cmd + '\n')
+
+    def run_xhla(self, fq1_file=['HPAP001_subset.R1.fastq.gz'], sif_file='xhla.sif', fasta_file='Homo_sapiens_assembly38.fasta', out_file='run_xhla.sh', n_thresholds=4, out_dir='xhla'):
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        with open(out_file, 'w') as outfile:
+            for fq1 in fq1_file:
+                print(fq1)
+                fq2 = fq1.replace('.R1.fastq.gz', '.R2.fastq.gz')
+                bam_file = fq1.replace('.R1.fastq.gz', '.bam')
+                sample_id = os.path.basename(fq1).split('_subset')[0]
+                cmd = f'bwa mem -t {n_thresholds} {fasta_file} {fq1} {fq2} > {bam_file}'
+                outfile.write(cmd + '\n')
+                cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} run.py --sample_id {sample_id} --input_bam_path {bam_file} --output_path {out_dir}'
+                outfile.write(cmd + '\n')
