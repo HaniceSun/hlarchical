@@ -13,6 +13,8 @@ dependencies:
   - PyYAML=6.0.3
   - scikit-learn=1.8.0
   - joblib=1.5.1
+  - plink=1.90b7.7
+  - plink2=2.0.0a.6.9
   - bcftools=1.22
   - bcftools-liftover-plugin
   - beagle=5.5_27Feb25.75f

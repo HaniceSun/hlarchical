@@ -209,7 +209,7 @@ if ($CLEANUP) then
     rm $OUTPUT.map
     rm $OUTPUT.log
     rm -r $JAVATMP
-    rm -f plink.log
+    #rm -f plink.log
     echo "DONE!"
     echo ""
 endif
