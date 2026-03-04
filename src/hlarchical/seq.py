@@ -38,7 +38,7 @@ class Seq:
                 fq2 = fq1.replace('.R1.fastq.gz', '.R2.fastq.gz')
                 sample_id = os.path.basename(fq1).split('_subset')[0]
                 bam_file = f'{out_dir}/{sample_id}.bam'
-                cmd = f'bwa mem -t {n_thresholds} {fasta_file} {fq1} {fq2} > {bam_file}; samtools index {bam_file}'
+                cmd = f'bwa mem -t {n_thresholds} {fasta_file} {fq1} {fq2} | samtools sort -@ {n_thresholds} -o {bam_file}; samtools index {bam_file}'
                 outfile.write(cmd + '\n')
                 cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} run.py --sample_id {sample_id} --input_bam_path {bam_file} --output_path {out_dir}/{out_dir}'
                 outfile.write(cmd + '\n')
