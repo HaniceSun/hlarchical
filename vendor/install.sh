@@ -1,5 +1,6 @@
-## SNP2HLA
+#!/usr/bin/bash
 
+## SNP2HLA
 vendor_dir=$(pwd)
 
 if [ ! -d SNP2HLA ]; then
@@ -67,3 +68,14 @@ fi
 if [[ ! -f "xHLA.sif" ]]; then
 singularity pull xHLA.sif docker://humanlongevity/hla
 fi
+
+# HLA-HD
+if [[ ! -d "HLA-HD" ]]; then
+    echo "HLA-HD needs license to download."
+fi
+
+## OptiType
+if [[ ! -f "OptiType.sif" ]]; then
+singularity pull OptiType.sif docker://fred2/optitype
+fi
+

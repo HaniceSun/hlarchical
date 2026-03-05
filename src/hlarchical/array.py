@@ -101,6 +101,7 @@ class Array():
             subprocess.run(cmd, shell=True, check=True)
 
     def format_output(self, in_file='', fam='', in_dir='', out_file='Euro_digit4.txt', digit=4, from_tool='snp2hla'):
+        header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
         if in_file.endswith('.phased'):
             if from_tool == 'snp2hla':
                 sep = ' '
@@ -117,7 +118,6 @@ class Array():
             df = pd.read_table(in_file, sep=sep, skiprows=skiprows, header=in_header)
             df = df.loc[df.iloc[:, col].str.startswith('HLA'), ]
 
-            header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
             wh = [len(x.split('_')[2]) == digit for x in df.iloc[:, col]]
             df = df.loc[wh, ]
 
@@ -185,10 +185,6 @@ class Array():
                     allele1 = ':'.join(a1[0:int(digit/2) + 1])
                     allele2 = ':'.join(a2[0:int(digit/2) + 1])
 
-                    if allele1 == '-':
-                        allele1 = '.'
-                    if allele2 == '-':
-                        allele2 = '.'
                     if len(allele1.split(':')) < int(digit/2) + 1:
                         allele1 = '.'
                     if len(allele2.split(':')) < int(digit/2) + 1:
@@ -196,7 +192,45 @@ class Array():
                     D[sample][hla] = [allele1, allele2]
         
             L = []
-            header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
+            for sample in sorted(D):
+                for hla in self.HLA:
+                    allele1, allele2 = ['.', '.']
+                    if hla in D[sample]:
+                        allele1, allele2 = D[sample][hla]
+                    L.append([sample, hla, allele1, allele2])
+            df = pd.DataFrame(L)
+            df.columns = header
+            df.to_csv(out_file, header=True, index=False, sep='\t')
+            print('Formatted output saved to', out_file)
+
+        elif from_tool == 'opti-type':
+            D = {}
+            fs = glob.glob(f'{in_dir}/**/*_result.tsv', recursive=True)
+            for f in sorted(fs):
+                sample = f.split('/')[-1].split('_result')[0]
+                df = pd.read_table(f, header=0)
+                if df.shape[0]:
+                    for n in range(1, df.shape[1] - 2, 2):
+                        hla = 'HLA-' + df.columns[n][0:-1]
+                        D.setdefault(sample, {})
+                        D[sample][hla] = ['.', '.']
+                        allele1 = 'HLA-' + df.iloc[0, n]
+                        allele2 = 'HLA-' + df.iloc[0, n + 1]
+                        allele1 = allele1.replace('*', ':')
+                        allele2 = allele2.replace('*', ':')
+        
+                        a1 = allele1.split(':')
+                        a2 = allele2.split(':')
+        
+                        allele1 = ':'.join(a1[0:int(digit/2) + 1])
+                        allele2 = ':'.join(a2[0:int(digit/2) + 1])
+                        if len(allele1.split(':')) < int(digit/2) + 1:
+                            allele1 = '.'
+                        if len(allele2.split(':')) < int(digit/2) + 1:
+                            allele2 = '.'
+                        D[sample][hla] = [allele1, allele2]
+        
+            L = []
             for sample in sorted(D):
                 for hla in self.HLA:
                     allele1, allele2 = ['.', '.']

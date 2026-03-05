@@ -29,7 +29,8 @@ class Seq:
                 cmd = f'hlahd.sh -t {n_thresholds} -m {min_read_length} -c {trim_rate} -f {freq_data} {fq1} {fq2} {gene_split_file} {dict_file} {sample_id} {out_dir}'
                 outfile.write(cmd + '\n')
 
-    def run_xhla(self, fq1_file=['HPAP001_subset.R1.fastq.gz'], sif_file='xhla.sif', genome_index='GRCh38', out_file='run_xhla.sh', n_thresholds=4, out_dir='xHLA'):
+    def run_xhla(self, fq1_file=['HPAP001_subset.R1.fastq.gz'], sif_file='xhla.sif', genome_index='hg38', out_file='run_xhla.sh', n_thresholds=4, out_dir='xHLA'):
+        # genome reference must be hg38 rather than GRCh38, because the HLA region has been hard coded with chr in xHLA.
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
