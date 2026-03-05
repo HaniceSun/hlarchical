@@ -4,6 +4,7 @@ import pandas as pd
 import subprocess
 import torch
 import shutil
+import glob
 from importlib import resources
 import matplotlib
 matplotlib.use('Agg')
@@ -99,7 +100,7 @@ class Array():
             print(cmd)
             subprocess.run(cmd, shell=True, check=True)
 
-    def format_output(self, in_file='1958BC_Euro.bgl.phased', fam='1958BC_Euro.fam', out_file='1958BC_Euro_digit4.txt', digit=4, from_tool='snp2hla'):
+    def format_output(self, in_file='', fam='', in_dir='', out_file='Euro_digit4.txt', digit=4, from_tool='snp2hla'):
         if in_file.endswith('.phased'):
             if from_tool == 'snp2hla':
                 sep = ' '
@@ -162,6 +163,49 @@ class Array():
                 df_out['Allele2'] = df['HLA'] + ':' + df['allele2']
             df_out.sort_values(by=['SampleID', 'HLA'], inplace=True)
             df_out.to_csv(out_file, sep='\t', index=False, header=True)
+            print('Formatted output saved to', out_file)
+
+        elif from_tool == 'hla-hd':
+            D = {}
+            fs = glob.glob(f'{in_dir}/**/result/*.est.txt', recursive=True)
+            for f in sorted(fs):
+                sample = f.split('/')[-3]
+                hla = 'HLA-' + f.split('/')[-1].split('_')[-1].split('.est.txt')[0]
+                D.setdefault(sample, {})
+                D[sample].setdefault(hla, ['.', '.'])
+                df = pd.read_table(f, comment='#', header=None)
+                if df.shape[0] > 0 and df.shape[1] > 1:
+                    allele1 = df.iloc[0, 0]
+                    allele2 = df.iloc[0, 1]
+                    allele1 = allele1.replace('*', ':')
+                    allele2 = allele2.replace('*', ':')
+        
+                    a1 = allele1.split(':')
+                    a2 = allele2.split(':')
+                    allele1 = ':'.join(a1[0:int(digit/2) + 1])
+                    allele2 = ':'.join(a2[0:int(digit/2) + 1])
+
+                    if allele1 == '-':
+                        allele1 = '.'
+                    if allele2 == '-':
+                        allele2 = '.'
+                    if len(allele1.split(':')) < int(digit/2) + 1:
+                        allele1 = '.'
+                    if len(allele2.split(':')) < int(digit/2) + 1:
+                        allele2 = '.'
+                    D[sample][hla] = [allele1, allele2]
+        
+            L = []
+            header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
+            for sample in sorted(D):
+                for hla in self.HLA:
+                    allele1, allele2 = ['.', '.']
+                    if hla in D[sample]:
+                        allele1, allele2 = D[sample][hla]
+                    L.append([sample, hla, allele1, allele2])
+            df = pd.DataFrame(L)
+            df.columns = header
+            df.to_csv(out_file, header=True, index=False, sep='\t')
             print('Formatted output saved to', out_file)
 
         elif from_tool == 'hlatyping':

@@ -42,3 +42,14 @@ class Seq:
                 outfile.write(cmd + '\n')
                 cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} run.py --sample_id {sample_id} --input_bam_path {bam_file} --output_path {out_dir}/{out_dir}'
                 outfile.write(cmd + '\n')
+
+    def run_optitype(self, fq1_file=['HPAP001_subset.R1.fastq.gz'], sif_file='OptiType.sif', out_file='run_optitype.sh', n_thresholds=4, out_dir='OptiType', seq_type='dna'):
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        with open(out_file, 'w') as outfile:
+            for fq1 in fq1_file:
+                fq2 = fq1.replace('.R1.fastq.gz', '.R2.fastq.gz')
+                sample_id = os.path.basename(fq1).split('_subset')[0]
+                cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} OptiTypePipeline.py --{seq_type} -i {fq1} {fq2} -o {out_dir} -p {sample_id} -v'
+                outfile.write(cmd + '\n')
