@@ -203,7 +203,49 @@ class Array():
             df.to_csv(out_file, header=True, index=False, sep='\t')
             print('Formatted output saved to', out_file)
 
-        elif from_tool == 'opti-type':
+        elif from_tool == 'xhla':
+            D = {}
+            fs = glob.glob(f'{in_dir}/**/*-hla.json', recursive=True)
+            for f in fs:
+                sample = f.split('/')[-1].split('-hla.json')[0].split('report-')[-1]
+                df = pd.read_json(f)
+                if df.shape[0]:
+                    L = df.loc['alleles', 'hla']
+                    for n in range(0, len(L), 2):
+                        hla = 'HLA-' + L[n].split('*')[0]
+                        D.setdefault(sample, {})
+                        D[sample][hla] = ['.', '.']
+                        allele1 = 'HLA-' + L[n]
+                        allele2 = 'HLA-' + L[n + 1]
+                        allele1 = allele1.replace('*', ':')
+                        allele2 = allele2.replace('*', ':')
+        
+                        a1 = allele1.split(':')
+                        a2 = allele2.split(':')
+        
+                        allele1 = ':'.join(a1[0:int(digit/2) + 1])
+                        allele2 = ':'.join(a2[0:int(digit/2) + 1])
+                        if len(allele1.split(':')) < int(digit/2) + 1:
+                            allele1 = '.'
+                        if len(allele2.split(':')) < int(digit/2) + 1:
+                            allele2 = '.'
+                        D[sample][hla] = [allele1, allele2]
+        
+            L = []
+            header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
+            for sample in sorted(D):
+                for hla in self.HLA:
+                    allele1, allele2 = ['.', '.']
+                    if hla in D[sample]:
+                        allele1, allele2 = D[sample][hla]
+                    L.append([sample, hla, allele1, allele2])
+
+            df = pd.DataFrame(L)
+            df.columns = header
+            df.to_csv(out_file, header=True, index=False, sep='\t')
+            print('Formatted output saved to', out_file)
+
+        elif from_tool == 'optitype':
             D = {}
             fs = glob.glob(f'{in_dir}/**/*_result.tsv', recursive=True)
             for f in sorted(fs):

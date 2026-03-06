@@ -41,7 +41,7 @@ class Seq:
                 bam_file = f'{out_dir}/{sample_id}.bam'
                 cmd = f'bwa mem -t {n_thresholds} {genome_index} {fq1} {fq2} | samtools sort -@ {n_thresholds} -o {bam_file}; samtools index {bam_file}'
                 outfile.write(cmd + '\n')
-                cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} run.py --sample_id {sample_id} --input_bam_path {bam_file} --output_path {out_dir}/{out_dir}'
+                cmd = f'singularity exec -B `pwd`:`pwd` --pwd `pwd` {sif_file} run.py --sample_id {sample_id} --input_bam_path {bam_file} --output_path {out_dir}/{sample_id}'
                 outfile.write(cmd + '\n')
 
     def run_optitype(self, fq1_file=['HPAP001_subset.R1.fastq.gz'], sif_file='OptiType.sif', out_file='run_optitype.sh', n_thresholds=4, out_dir='OptiType', seq_type='dna'):
