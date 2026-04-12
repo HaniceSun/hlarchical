@@ -175,8 +175,12 @@ class Array():
                 D[sample].setdefault(hla, ['.', '.'])
                 df = pd.read_table(f, comment='#', header=None)
                 if df.shape[0] > 0 and df.shape[1] > 1:
-                    allele1 = df.iloc[0, 0]
-                    allele2 = df.iloc[0, 1]
+                    item1 = df.iloc[0, 0].split(',')
+                    item2 = df.iloc[0, 1].split(',')
+                    if len(item1) > 1 or len(item2) > 1:
+                        print(f'Warning: multiple alleles found for sample {sample} and HLA {hla} in file {f}. Only the first allele will be used.', flush=True)
+                    allele1 = item1[0]
+                    allele2 = item2[0]
                     allele1 = allele1.replace('*', ':')
                     allele2 = allele2.replace('*', ':')
         
