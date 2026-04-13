@@ -189,6 +189,9 @@ class Array():
                     allele1 = ':'.join(a1[0:int(digit/2) + 1])
                     allele2 = ':'.join(a2[0:int(digit/2) + 1])
 
+                    if allele2 == '-':
+                        allele2 = allele1
+
                     if len(allele1.split(':')) < int(digit/2) + 1:
                         allele1 = '.'
                     if len(allele2.split(':')) < int(digit/2) + 1:
