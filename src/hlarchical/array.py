@@ -332,7 +332,7 @@ class Array():
             df.to_csv(out_file, header=True, index=False, sep='\t')
 
     def merge_outputs(self, ancestry_file='GAP_OMNI_GDA.txt', out_file='HLA_OMNI_GDA.txt', digits=[2, 4],
-                      tools=['SNP2HLA', 'HIBAG'], Ancestry=['European', 'Asian', 'African', 'Hispanic'], Array=['GDA', 'OMNI'], ensemble=['HIBAG', 'SNP2HLA']):
+                      tools=['SNP2HLA', 'HIBAG', 'hlarchicalMLP', 'hlarchicalCNN'], Ancestry=['European', 'Asian', 'African', 'Hispanic', 'MA'], Array=['GDA', 'OMNI'], ensemble=['HIBAG', 'SNP2HLA']):
         D = {}
         A = {}
         for digit in digits:
@@ -355,6 +355,8 @@ class Array():
                                 sample_id = row['SampleID']
                                 if sample_id_with_fid:
                                     sample_id = '-'.join(sample_id.split('-')[1:])
+                                if in_file.find('hlarchical') != -1:
+                                    sample_id = '_'.join(sample_id.split('_')[1:])
                                 A[sample_id] = array
                                 hla = row['HLA']
                                 allele1 = row['Allele1']
@@ -395,6 +397,8 @@ class Array():
                                 pass
                             else:
                                 ancestry = 'European'
+                        if tool.find('hlarchical') != -1:
+                            ancestry = 'MA'
     
                         k = (sample_name, hla)
                         allele1, allele2 = ['.', '.']
@@ -486,7 +490,7 @@ class Array():
         df_ancestry.columns = ['HLA', 'ancestry', 'method', 'score', 'genotyping', 'typing']
         df_ancestry.to_csv(out_file_ancestry, sep='\t', index=False, header=True)
 
-    def bar_plot_score(self, in_file, digits=[2, 4], methods=['SNP2HLA', 'HIBAG', 'ensemble']):
+    def bar_plot_score(self, in_file, digits=[2, 4], methods=['SNP2HLA', 'HIBAG', 'hlarchicalMLP', 'hlarchicalCNN']):
         df = pd.read_table(in_file, header=0, sep='\t')
         for digit in digits:
             for method in methods:
