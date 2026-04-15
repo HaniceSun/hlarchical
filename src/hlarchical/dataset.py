@@ -26,7 +26,7 @@ class CustomDataset(Dataset):
         for n in range(1, df_labels.shape[1]):
             mat.append(df_labels.iloc[:, n].str.split('|', expand=True).astype(int).values)
         mat = np.array(mat).transpose(1, 2, 0)
-        self.y = torch.tensor(mat, dtype=torch.float32)
+        self.y = torch.tensor(mat, dtype=torch.long)
         print(f'X shape: {self.X.shape}')
         print(f'y shape: {self.y.shape}')
         self.random_seed = 42
