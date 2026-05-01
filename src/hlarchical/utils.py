@@ -184,6 +184,7 @@ def txt_to_vcf_23andme(in_file, genome_build='GRCh37', chrom_hla='6'):
     with open(in_file) as f_in, open(out_file, 'w') as f_out:
         f_out.write('##fileformat=VCFv4.2\n')
         f_out.write('##source=23andMe\n')
+        f_out.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
         f_out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample}\n')
         for line in f_in:
             if line.startswith('#'):
@@ -209,10 +210,9 @@ def txt_to_vcf_23andme(in_file, genome_build='GRCh37', chrom_hla='6'):
                     fm = '0/0'
                 elif alt == D[chrom][pos-1]:
                     fm = '1/1'
-
             f_out.write(f'{chrom}\t{pos}\t{rsid}\t{ref}\t{alt}\t.\t.\t.\tGT\t{fm}\n')
         print(f'{out_file} written successfully')
-    cmd = f'bgzip -f {out_file}; tabix -f -p vcf {out_file}.gz'
+    cmd = f'bgzip -f {out_file}; tabix -p vcf -f {out_file}.gz'
     subprocess.run(cmd, shell=True)
 
 def remove_chr_vcf(in_file, chr_map='chr_map.txt'):
