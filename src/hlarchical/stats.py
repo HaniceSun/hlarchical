@@ -170,12 +170,15 @@ class AssociationDiseaseHLA():
         print(f"LLR Statistic: {llr_stat}, p-value: {p_value}")
         return llr_stat, p_value
 
-    def forest_plot(self, df, estimate='OR', xlabel='Odds Ratio', y_ticklabels='HLA', logscale=True, s=40, palette='Set2', hue=None, hue_order=None, show_grid=True, out_file='forest_plot.pdf', title=None, figsize=(4, 4), fontsize_params={'xlabel': 16, 'ylabel': 10, 'yticklabels':8, 'title': 16}, line_params={'color':'C0', 'lw':1}, grid_params={'ls':'--', 'alpha':0.7}, legend_params={'fontsize': 8, 'loc': 'upper right', 'bbox_to_anchor': (1, 0)}):
+    def forest_plot(self, df, estimate='OR', xlabel='Odds Ratio', y_ticklabels='HLA', logscale=True, s=40, palette='Set2', hue=None, hue_order=None, show_grid=True, out_file='forest_plot.pdf', title=None, figsize=(4, 4), fontsize_params={'xlabel': 16, 'ylabel': 10, 'yticklabels':8, 'title': 16}, line_params={'color':'C0', 'lw':1}, grid_params={'ls':'--', 'alpha':0.7}, legend_params={'fontsize': 8, 'loc': 'upper right', 'bbox_to_anchor': (1, 0)}, cmap_gene='Paired'):
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot()
         ax.set_ylim(0.5, df.shape[0] + 0.5)
         df['y'] = range(df.shape[0], 0, -1)
+        df['y_color'] = df['gene'].map(dict(zip(self.HLA, sns.color_palette(cmap_gene, n_colors=len(self.HLA)))))
         ax.set_yticks(df['y'], df[y_ticklabels], fontsize=fontsize_params['yticklabels'])
+        for ticklabel, color in zip(ax.get_yticklabels(), df['y_color']):
+            ticklabel.set_color(color)
 
         if hue is not None:
             sns.scatterplot(data=df, x=estimate, y='y', ax=ax, marker='s', hue=hue, hue_order=hue_order, palette=palette, edgecolor=None, s=s)
