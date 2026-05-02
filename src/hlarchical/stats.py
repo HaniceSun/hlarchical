@@ -170,15 +170,20 @@ class AssociationDiseaseHLA():
         print(f"LLR Statistic: {llr_stat}, p-value: {p_value}")
         return llr_stat, p_value
 
-    def forest_plot(self, df, estimate='OR', xlabel='Odds Ratio', y_ticklabels='HLA', logscale=True, s=40, palette='Set2', hue=None, hue_order=None, show_grid=True, out_file='forest_plot.pdf', title=None, figsize=(4, 4), fontsize_params={'xlabel': 16, 'ylabel': 10, 'yticklabels':8, 'title': 16}, line_params={'color':'C0', 'lw':1}, grid_params={'ls':'--', 'alpha':0.7}, legend_params={'fontsize': 8, 'loc': 'upper right', 'bbox_to_anchor': (1, 0)}, cmap_gene='Paired'):
+    def forest_plot(self, df, estimate='OR', xlabel='Odds Ratio', y_ticklabels='HLA', logscale=True, s=40, palette='Set2', hue=None, hue_order=None, show_grid=True, out_file='forest_plot.pdf', title=None, figsize=(4, 4), fontsize_params={'xlabel': 16, 'ylabel': 10, 'yticklabels':8, 'title': 16}, line_params={'color':'C0', 'lw':1}, grid_params={'ls':'--', 'alpha':0.7}, legend_params={'fontsize': 8, 'loc': 'upper right', 'bbox_to_anchor': (1, 0)}, cmap_gene='Dark2', y_ticklabels_mask=[]):
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot()
         ax.set_ylim(0.5, df.shape[0] + 0.5)
         df['y'] = range(df.shape[0], 0, -1)
         df['y_color'] = df['gene'].map(dict(zip(self.HLA, sns.color_palette(cmap_gene, n_colors=len(self.HLA)))))
         ax.set_yticks(df['y'], df[y_ticklabels], fontsize=fontsize_params['yticklabels'])
+
+        n = -1
         for ticklabel, color in zip(ax.get_yticklabels(), df['y_color']):
+            n += 1
             ticklabel.set_color(color)
+            if n % len(hue_order) in y_ticklabels_mask:
+                ticklabel.set_visible(False)
 
         if hue is not None:
             sns.scatterplot(data=df, x=estimate, y='y', ax=ax, marker='s', hue=hue, hue_order=hue_order, palette=palette, edgecolor=None, s=s)
@@ -205,38 +210,39 @@ class AssociationDiseaseHLA():
         plt.savefig(out_file)
 
 if __name__ == '__main__':
-
-	value_clip = [0.1, 10]
-	hla = AssociationDiseaseHLA()
-
-	in_file = 'HLAtyping_T1D_1KG_additive_stats_HLA_Ancestry_sig.txt'
-	out_file = in_file.replace('.txt', '_forest.pdf')
-	df = pd.read_table(in_file, header=0, sep='\t')
-	df['gene'] = [x.split(':')[0] for x in df['HLA']]
-	df['allele'] = [int(x.split(':')[-1]) for x in df['HLA']]
-	df.sort_values(by=['gene', 'allele', 'param', 'pvalue'], inplace=True)
-	df['OR'] = df['OR'].clip(upper=value_clip[1], lower=value_clip[0])
-	df['ci_low'] = df['ci_low'].clip(upper=value_clip[1], lower=value_clip[0])
-	df['ci_high'] = df['ci_high'].clip(upper=value_clip[1], lower=value_clip[0])
-	hla.forest_plot(df=df, out_file=out_file, title='T1D ~ HLA + Ancestry', figsize=[4, 6])
-
-	in_file = 'HLAtyping_T1D_1KG_interaction_stats_HLA_Ancestry_sig.txt'
-	out_file = in_file.replace('.txt', '_forest.pdf')
-	df = pd.read_table(in_file, header=0, sep='\t')
-	wh = df['param'] != 'HLA:Ancestry[T.AMR]'
-	df = df[wh]
-
-	df['OR'] = df['OR'].clip(upper=value_clip[1], lower=value_clip[0])
-	df['ci_low'] = df['ci_low'].clip(upper=value_clip[1], lower=value_clip[0])
-	df['ci_high'] = df['ci_high'].clip(upper=value_clip[1], lower=value_clip[0])
-
-	D = {}
-	D['HLA'] = 'EUR'
-	D['HLA:Ancestry[T.EAS]'] = 'EAS'
-	D['HLA:Ancestry[T.SAS]'] = 'SAS'
-	df['Ancestry'] = df['param'].map(D)
-
-	df['gene'] = [x.split(':')[0] for x in df['HLA']]
-	df['allele'] = [int(x.split(':')[-1]) for x in df['HLA']]
-	df.sort_values(by=['gene', 'allele', 'param', 'pvalue'], inplace=True)
-	hla.forest_plot(df=df, out_file=out_file, title='T1D ~ HLA * Ancestry', hue='Ancestry', hue_order=['EUR', 'EAS', 'SAS'], figsize=[4, 8])
+    value_clip = [0.1, 10]
+    
+    hla = AssociationDiseaseHLA()
+    
+    in_file = 'HLAtyping_T1D_1KG_additive_stats_HLA_Ancestry_sig.txt'
+    out_file = in_file.replace('.txt', '_forest.pdf')
+    df = pd.read_table(in_file, header=0, sep='\t')
+    df['gene'] = [x.split(':')[0] for x in df['HLA']]
+    df['allele'] = [int(x.split(':')[-1]) for x in df['HLA']]
+    df.sort_values(by=['gene', 'allele', 'param', 'pvalue'], inplace=True)
+    df['OR'] = df['OR'].clip(upper=value_clip[1], lower=value_clip[0])
+    df['ci_low'] = df['ci_low'].clip(upper=value_clip[1], lower=value_clip[0])
+    df['ci_high'] = df['ci_high'].clip(upper=value_clip[1], lower=value_clip[0])
+    df['class'] = df['OR'].apply(lambda x: 'risk' if x > 1 else 'protective')
+    hla.forest_plot(df=df, out_file=out_file, title='T1D ~ HLA + Ancestry', hue='class', hue_order=['protective', 'risk'], figsize=[4, 6], legend_params={'fontsize': 8, 'loc': 'lower right', 'bbox_to_anchor': (1, 0)}, palette=['C2', 'C3'])
+    
+    in_file = 'HLAtyping_T1D_1KG_interaction_stats_HLA_Ancestry_sig.txt'
+    out_file = in_file.replace('.txt', '_forest.pdf')
+    df = pd.read_table(in_file, header=0, sep='\t')
+    wh = df['param'] != 'HLA:Ancestry[T.AMR]'
+    df = df[wh]
+    
+    df['OR'] = df['OR'].clip(upper=value_clip[1], lower=value_clip[0])
+    df['ci_low'] = df['ci_low'].clip(upper=value_clip[1], lower=value_clip[0])
+    df['ci_high'] = df['ci_high'].clip(upper=value_clip[1], lower=value_clip[0])
+    
+    D = {}
+    D['HLA'] = 'EUR'
+    D['HLA:Ancestry[T.EAS]'] = 'EAS'
+    D['HLA:Ancestry[T.SAS]'] = 'SAS'
+    df['Ancestry'] = df['param'].map(D)
+    
+    df['gene'] = [x.split(':')[0] for x in df['HLA']]
+    df['allele'] = [int(x.split(':')[-1]) for x in df['HLA']]
+    df.sort_values(by=['gene', 'allele', 'param', 'pvalue'], inplace=True)
+    hla.forest_plot(df=df, out_file=out_file, title='T1D ~ HLA * Ancestry', hue='Ancestry', hue_order=['EUR', 'EAS', 'SAS'], figsize=[4, 8], legend_params={'fontsize': 8, 'loc': 'lower right', 'bbox_to_anchor': (1, 0.6)}, y_ticklabels_mask=[0, 2], fontsize_params={'xlabel': 16, 'ylabel': 10, 'yticklabels':12, 'title': 16})
