@@ -373,6 +373,8 @@ class Summary():
                                 ancestry = 'Hispanic'
                             else:
                                 ancestry = 'European'
+                        elif tool in ['michigan']:
+                            ancestry = 'MA'
                         elif tool.find('hlarchical') != -1:
                             ancestry = 'MA'
                         else:
