@@ -228,7 +228,7 @@ class Summary():
                 for gene in D[sample]:
                     for gt in D[sample][gene]:
                         D[sample][gene][gt] = sorted(D[sample][gene][gt], key=lambda x:x[1], reverse=True)
-                        print([sample, gene, gt] + D[sample][gene][gt])
+                        #print([sample, gene, gt] + D[sample][gene][gt])
 
             L = []
             for sample in sorted(D):
