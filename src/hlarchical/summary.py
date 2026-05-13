@@ -198,6 +198,56 @@ class Summary():
             df.to_csv(out_file, header=True, index=False, sep='\t')
             print('Formatted output saved to', out_file)
 
+        elif from_tool == 'michigan-server':
+            D = {}
+            with gzip.open(in_file, 'rt') as f:
+                for line in f:
+                    line = line.strip()
+                    if line[0] == '#':
+                        if line.find('#CHROM') == 0:
+                            header = line.split('\t')
+                    else:
+                        fields = line.split('\t')
+                        if fields[2].find('HLA') == 0:
+                            hla = fields[2].replace('_', '-').replace('*', ':')
+                            gene = hla.split(':')[0]
+                            if (len(hla.split(':')) - 1) * 2 == digit:
+                                r2 = float(fields[7].split('R2=')[-1].split(';')[0])
+                                for n in range(9, len(fields)):
+                                    sample = header[n]
+                                    D.setdefault(sample, {})
+                                    D[sample].setdefault(gene, {})
+                                    fds = fields[n].split(':')
+                                    gt = fds[0]
+                                    ds = float(fds[-1])
+                                    if gt.find('1') != -1:
+                                        D[sample][gene].setdefault(gt, [])
+                                        D[sample][gene][gt].append([hla, r2, ds])
+
+            for sample in D:
+                for gene in D[sample]:
+                    for gt in D[sample][gene]:
+                        D[sample][gene][gt] = sorted(D[sample][gene][gt], key=lambda x:x[1], reverse=True)
+                        print([sample, gene, gt] + D[sample][gene][gt])
+
+            L = []
+            for sample in sorted(D):
+                for gene in self.HLA:
+                    allele1 = '.'
+                    allele2 = '.'
+                    for gt in ['1|1', '0|1', '1|0', '1/1', '0/1', '1/0']:
+                        if gt in D[sample][gene]:
+                            if gt in ['1|1', '1/1']:
+                                allele1 = D[sample][gene][gt][0][0]
+                                allele2 = D[sample][gene][gt][0][0]
+                            elif gt in ['0|1', '0/1']:
+                                allele1 = D[sample][gene][gt][0][0]
+                            elif gt in ['1|0', '1/0']:
+                                allele2 = D[sample][gene][gt][0][0]
+                    L.append([sample, gene, allele1, allele2])
+            df = pd.DataFrame(L, columns = ['Sample', 'HLA', 'Allele1', 'Allele2'])
+            df.to_csv(out_file, header=True, index=False, sep='\t')
+
         elif from_tool == 'hla-typing':
             # internal use only
             df = pd.read_excel(in_file, dtype=str, skiprows=2)
@@ -419,7 +469,7 @@ class Summary():
                 print([in_file, digit, method, txt2], flush=True)
 
                 ax.set_ylim(0, 1.2)
-                ax.set_title(f'Average accuracy:{score_avg:.4f} ({method} {digit}digit)')
+                ax.set_title(f'Average accuracy:{score_avg:.4f}\n({method} {digit}digit)')
                 ax.set_ylabel('Score')
                 ax.set_xlabel('')
                 ax.tick_params(axis='x', rotation=90)
