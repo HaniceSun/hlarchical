@@ -245,7 +245,7 @@ class Summary():
                             elif gt in ['1|0', '1/0']:
                                 allele2 = D[sample][gene][gt][0][0]
                     L.append([sample, gene, allele1, allele2])
-            df = pd.DataFrame(L, columns = ['Sample', 'HLA', 'Allele1', 'Allele2'])
+            df = pd.DataFrame(L, columns = ['SampleID', 'HLA', 'Allele1', 'Allele2'])
             df.to_csv(out_file, header=True, index=False, sep='\t')
 
         elif from_tool == 'hla-typing':
