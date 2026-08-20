@@ -6,7 +6,7 @@
 
 **Hlarchical** is implementing deep learning models for imputing human leukocyte antigen (HLA) alleles from genotyping data. HLA genes are highly polymorphic and play a critical role in immune response, disease susceptibility, drug hypersensitivity, and transplant compatibility.
 
-While high-resolution HLA typing using sequencing technologies is accurate, it remains expensive and unavailable for many large-scale studies. Existing methods for imputing HLA types from genotyping data include Hidden Markov Model–based SNP2HLA, machine learning–based HIBAG, convolutional neural network–based DEEP*HLA, and Transformer-based HLARIMNT, among others.
+While high-resolution HLA typing using sequencing technologies is accurate, it remains expensive and unavailable for many large-scale studies. Existing methods for imputing HLA types from genotyping data include Hidden Markov Model–based SNP2HLA that underlies HLA imputation on the Michigan Imputation Server, machine learning–based HIBAG, convolutional neural network–based DEEP*HLA, and Transformer-based HLARIMNT, among others.
 
 Inspired by previous studies, hlarchical aims to improve HLA imputation performance by exploring and exploiting the following features:
 
