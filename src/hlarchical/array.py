@@ -29,7 +29,7 @@ class Array():
         cmd = f'tcsh SNP2HLA.csh {in_file} {ref_file} {out_file} plink {heap_size} {window_size}'
         print(cmd)
         subprocess.run(cmd, shell=True, check=True)
-        #shutil.rmtree(working_dir)
+        shutil.rmtree(working_dir)
 
     def run_hibag(self, in_file='1958BC', ref='European', out_file='1958BC_European_HIBAG', Renv='R4.5'):
         hibag_script = f'{resources.files("hlarchical").parent.parent}/vendor/HIBAG/hibag.R'

@@ -4,7 +4,11 @@ class Summary():
     def __init__(self):
         self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def get_hlarchical_table(self, in_file='', in_dir='HLA-HD', out_file='1000G_WGS_HLA-HD.txt', digit=4, from_tool='hla-hd'):
+    def get_hlarchical_table(self, in_file='', in_dir='HLA-HD', out_file='1000G_WGS_HLA-HD.txt', digit=4, from_tool='hla-hd', fix_sample_name_by_fam=None):
+        D = {}
+        if fix_sample_name_by_fam is not None and os.path.exists(fix_sample_name_by_fam):
+            D = self._fix_sample_name_by_fam(fix_sample_name_by_fam)
+
         header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
         if in_file.endswith('.phased'):
             if from_tool == 'snp2hla':
@@ -47,7 +51,7 @@ class Summary():
                         allele2[k].append(':'.join([k] + fields[2:]))
 
                 for hla in self.HLA:
-                    L.append([sample_id, hla, ','.join(allele1.get(hla, '.')), ','.join(allele2.get(hla, '.'))])
+                    L.append([D.get(sample_id, sample_id), hla, ','.join(allele1.get(hla, '.')), ','.join(allele2.get(hla, '.'))])
 
             df = pd.DataFrame(L)
             df.columns = header
@@ -57,7 +61,7 @@ class Summary():
         elif from_tool == 'hibag':
             df = pd.read_table(in_file, header=0, sep='\t')
             df_out = pd.DataFrame()
-            df_out['SampleID'] = df['sample.id']
+            df_out['SampleID'] = [D.get(k, k) for k in df['sample.id']]
             df_out['HLA'] = df['HLA']
             if digit == 2:
                 df_out['Allele1'] = df['HLA'] + ':' + df['allele1'].str.split(':').str[0]
@@ -231,7 +235,7 @@ class Summary():
                         #print([sample, gene, gt] + D[sample][gene][gt])
 
             L = []
-            for sample in sorted(D):
+            for sample in D:
                 for gene in self.HLA:
                     allele1 = '.'
                     allele2 = '.'
@@ -290,6 +294,30 @@ class Summary():
         else:
             raise ValueError(f'Unsupported tool: {from_tool}. Supported tools are: snp2hla, deep-hla, hibag, hla-hd, xhla, opti-type, hla-typing.')
 
+    def _fix_sample_name_by_fam(self, fam_file):
+        D1 = {}
+        D2 = {}
+        df = pd.read_table(fam_file, header=None, sep=' ')
+        for n in range(df.shape[0]):
+            fid = df.iloc[n, 0]
+            iid = df.iloc[n, 1]
+            v = f'{fid}_{iid}'
+            k1 = iid
+            k2 = f'{fid}-{iid}'
+            D1.setdefault(k1, [])
+            D1.setdefault(k2, [])
+            D1[k1].append(v)
+            D1[k2].append(v)
+        for k in D1:
+            if len(D1[k]) == 1:
+                D2[k] = D1[k][0]
+            else:
+                D2[k] = D1[k][0]
+                for n in range(1, len(D1[k])):
+                    k2 = f'{k}.{n+1}'
+                    D2[k2] = D1[k][n]
+        return D2
+
     def merge_hlarchical_tables(self, out_file='HLA_OMNI_GDA_GAP.txt', digits=[2, 4], tools=['SNP2HLA', 'HIBAG', 'hlarchicalMLPwithoutAncestry', 'hlarchicalMLPwithAncestry'],
                                 Ancestry=['European', 'Asian', 'African', 'Hispanic', 'MA'], Array=['GDA', 'OMNI'], ancestry_file='GAP_OMNI_GDA.txt'):
         D = {}
@@ -310,19 +338,8 @@ class Summary():
                         in_file = f'{array}_{ancestry}_{tool}_digit{digit}.txt'
                         if os.path.exists(in_file):
                             df = pd.read_csv(in_file, sep='\t', header=0)
-
-                            # assuming sample_id contains FID, if all SampleID starts with '\d+-' or '\d+_'
-                            sample_id_with_fid_dash = df['SampleID'].str.contains(r'^\d+-', na=False).all()
-                            sample_id_with_fid_underscore = df['SampleID'].str.contains(r'^\d+_', na=False).all()
-                            if sample_id_with_fid_dash or sample_id_with_fid_underscore:
-                                print(f'FID is being excluded from SampleID in {in_file}', flush=True)
-
                             for i, row in df.iterrows():
                                 sample_id = row['SampleID']
-                                if sample_id_with_fid_dash:
-                                    sample_id = '-'.join(sample_id.split('-')[1:])
-                                elif sample_id_with_fid_underscore:
-                                    sample_id = '_'.join(sample_id.split('_')[1:])
                                 SA['SampleID'][sample_id] = sample_id
                                 SA['Array'][sample_id] = array
                                 hla = row['HLA']

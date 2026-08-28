@@ -44,6 +44,7 @@ def get_parser():
     p4.add_argument('--output', type=str, default='data/1958BC_Euro_digit4.txt', help='output file')
     p4.add_argument('--digit', type=int, default=4, help='digit level for HLA alleles')
     p4.add_argument('--from_tool', type=str, default='snp2hla', help='the tool that generated the input file')
+    p4.add_argument('--fix_sample_name_by_fam', type=str, default=None, help='fix the sample name by provided fam file')
 
     p11 = subparsers.add_parser("run-snp2hla", help="run SNP2HLA on array data")
     p11.add_argument('--input', type=str, default='1958BC', help='input file prefix')
@@ -149,7 +150,7 @@ def main():
                         hla_json=args.hla_json, model_json=args.model_json, model_dir=args.model_dir, subset=args.subset)
     elif args.command == 'get-hlarchical-table':
         hla = Summary()
-        hla.get_hlarchical_table(in_file=args.input, out_file=args.output, digit=args.digit, from_tool=args.from_tool)
+        hla.get_hlarchical_table(in_file=args.input, out_file=args.output, digit=args.digit, from_tool=args.from_tool, fix_sample_name_by_fam=args.fix_sample_name_by_fam)
 
 if __name__ == '__main__':
     main()
