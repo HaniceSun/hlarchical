@@ -318,55 +318,66 @@ class Summary():
                     D2[k2] = D1[k][n]
         return D2
 
-    def merge_hlarchical_tables(self, out_file='HLA_OMNI_GDA_GAP.txt', digits=[2, 4], tools=['SNP2HLA', 'HIBAG', 'hlarchicalMLPwithoutAncestry', 'hlarchicalMLPwithAncestry'],
-                                Ancestry=['European', 'Asian', 'African', 'Hispanic', 'MA'], Array=['GDA', 'OMNI'], ancestry_file='GAP_OMNI_GDA.txt'):
+    def merge_hlarchical_tables(self, out_file='HLA_OMNI-GDA_withGAP.txt', digits=[2, 4], tools=['SNP2HLA', 'HIBAG', 'hlarchical'],
+                                Ancestry=['European', 'Asian', 'African', 'Hispanic', 'MA'], ancestry_file='GAP_OMNI-GDA.txt'):
         D = {}
-        SA = {}
-        SA['SampleID'] = {}
-        SA['SampleName'] = {}
-        SA['Superpopulation'] = {}
-        SA['Population'] = {}
-        SA['Array'] = {}
-
         for digit in digits:
             D.setdefault(digit, {})
             for tool in tools:
                 D[digit].setdefault(tool, {})
                 for ancestry in Ancestry:
                     D[digit][tool].setdefault(ancestry, {})
-                    for array in Array:
-                        in_file = f'{array}_{ancestry}_{tool}_digit{digit}.txt'
-                        if os.path.exists(in_file):
-                            df = pd.read_csv(in_file, sep='\t', header=0)
-                            for i, row in df.iterrows():
-                                sample_id = row['SampleID']
-                                SA['SampleID'][sample_id] = sample_id
-                                SA['Array'][sample_id] = array
-                                hla = row['HLA']
-                                allele1 = row['Allele1']
-                                allele2 = row['Allele2']
-                                k = (sample_id, hla)
-                                D[digit][tool][ancestry][k] = (allele1, allele2)
-    
-        Ls = []
+                    in_file = f'HLA_OMNI-GDA_{ancestry}_{tool}_digit{digit}.txt'
+                    if os.path.exists(in_file):
+                        df = pd.read_csv(in_file, sep='\t', header=0)
+                        for n in range(df.shape[0]):
+                            sample_id = df['SampleID'].iloc[n]
+                            hla = df['HLA'].iloc[n]
+                            allele1 = df['Allele1'].iloc[n]
+                            allele2 = df['Allele2'].iloc[n]
+                            k = (sample_id, hla)
+                            D[digit][tool][ancestry][k] = (allele1, allele2)
+
+        SA = {}
         if ancestry_file is not None and os.path.exists(ancestry_file):
             df = pd.read_table(ancestry_file, header=0, sep='\t')
-            SA['SampleName'] = dict(zip(df['SampleID'], df['SampleName']))
-            SA['Superpopulation'] = dict(zip(df['SampleID'], df['Superpopulation']))
-            SA['Population'] = dict(zip(df['SampleID'], df['Population']))
+            for n in range(df.shape[0]):
+                sample_id = df['SampleID'].iloc[n]
+                sample_name = df['SampleName'].iloc[n]
+                array = df['Array'].iloc[n]
+                source = df['Source'].iloc[n]
+                sex = df['Sex'].iloc[n]
+                batch = df['Batch'].iloc[n]
+                project = df['Project'].iloc[n]
+                rrid = df['RRID'].iloc[n]
+                qc = df['QC'].iloc[n]
+                extra = df['Extra'].iloc[n]
+                superpopulation = df['Superpopulation'].iloc[n]
+                population = df['Population'].iloc[n]
+                SA[sample_id] = [sample_name, array, source, sex, batch, project, rrid, qc, extra, superpopulation, population]
         else:
             print('Ancestry not used', flush=True)
 
-        cols = ['SampleID', 'Superpopulation', 'Population', 'Array', 'HLA']
-        sample_ids = sorted(SA['SampleID'])
+        Ls = []
+        cols = ['SampleID', 'SampleName', 'Array', 'Source', 'Sex', 'Batch', 'Project', 'RRID', 'QC', 'Extra', 'Superpopulation', 'Population', 'HLA']
+        sa = sorted(SA.items(), key=lambda x: x[0])
+        sample_ids = [item[0] for item in sa]
         for sample_id in sample_ids:
-            sample_name = SA['SampleName'].get(sample_id, sample_id)
-            superpopulation = SA['Superpopulation'].get(sample_id, '.')
-            population = SA['Population'].get(sample_id, '.')
-            array = SA['Array'].get(sample_id, '.')
+            v = SA.get(sample_id, ['.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.'])
+            sample_name = v[0]
+            array = v[1]
+            source = v[2]
+            sex = v[3]
+            batch = v[4]
+            project = v[5]
+            rrid = v[6]
+            qc = v[7]
+            extra = v[8]
+            superpopulation = v[9]
+            population = v[10]
 
             for hla in self.HLA:
-                L = [sample_id, superpopulation, population, array, hla]
+                L = [sample_id, sample_name, array, source, sex, batch, project, rrid, qc, extra, superpopulation, population, hla]
                 for digit in digits:
                     for tool in tools:
                         if sample_id == sample_ids[0] and hla == self.HLA[0]:
@@ -390,14 +401,14 @@ class Summary():
                                 ancestry = 'Hispanic'
                             else:
                                 ancestry = 'European'
-                        elif tool in ['michigan']:
+                        elif tool.lower().find('michigan') != -1:
                             ancestry = 'MA'
                         elif tool.find('hlarchical') != -1:
                             ancestry = 'MA'
                         else:
                             raise ValueError(f'Unsupported tool: {tool}.')
 
-                        k = (sample_name, hla)
+                        k = (sample_id, hla)
                         allele1, allele2 = ['.', '.']
                         if ancestry in D[digit][tool]:
                             if k in D[digit][tool][ancestry]:
