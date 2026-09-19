@@ -7,7 +7,29 @@ from .array import Array
 from .summary import Summary
 from .utils import *
 
-def get_parser():
+
+def get_parser() -> argparse.ArgumentParser:
+    """Build the argparse CLI for the ``hla`` console-script entry point.
+
+    Defines one top-level parser with the following subcommands, each
+    corresponding to a step in the HLA imputation/typing workflow:
+
+    - ``quick-predict``: one-line prediction using the trained model with
+      default parameters.
+    - ``phase-sample-on-ref``: phase sample array data onto a reference panel.
+    - ``get-sample-features``: extract model-ready features from phased
+      sample data.
+    - ``predict``: run the trained model on a features file.
+    - ``get-hlarchical-table``: convert typing/imputation tool output into
+      the table format used internally by hlarchical.
+    - ``run-snp2hla``: run SNP2HLA on array data.
+    - ``run-hibag``: run HIBAG on array data.
+    - ``run-deephla``: run CNN-based DEEP*HLA on array data.
+
+    Returns:
+        argparse.ArgumentParser: The configured parser, with all subcommands
+        and their arguments registered.
+    """
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser = argparse.ArgumentParser(formatter_class=formatter_class)
     subparsers = parser.add_subparsers(dest='command', required=True)
@@ -69,7 +91,30 @@ def get_parser():
 
     return parser
 
-def main():
+
+def main() -> None:
+    """Parse CLI arguments and dispatch to the corresponding workflow step.
+
+    Builds the parser via :func:`get_parser`, parses ``sys.argv``, and routes
+    execution to the appropriate class method based on ``args.command``:
+
+    - ``quick-predict``: chains :class:`~hlarchical.preprocess.Preprocessor`,
+      :class:`~hlarchical.process.Processor`, and
+      :class:`~hlarchical.trainer.Trainer` to go from a raw VCF/23andMe file
+      straight to predicted HLA alleles using default reference/model files.
+    - ``phase-sample-on-ref``: calls
+      :meth:`~hlarchical.preprocess.Preprocessor.phase_sample_on_reference`.
+    - ``get-sample-features``: calls
+      :meth:`~hlarchical.process.Processor.get_sample_features`.
+    - ``predict``: calls :meth:`~hlarchical.trainer.Trainer.predict`.
+    - ``run-snp2hla``, ``run-hibag``, ``run-deephla``: call the corresponding
+      ``run_*`` method on :class:`~hlarchical.array.Array`.
+    - ``get-hlarchical-table``: calls
+      :meth:`~hlarchical.summary.Summary.get_hlarchical_table`.
+
+    Returns:
+        None
+    """
     parser = get_parser()
     args = parser.parse_args()
 
@@ -151,6 +196,7 @@ def main():
     elif args.command == 'get-hlarchical-table':
         hla = Summary()
         hla.get_hlarchical_table(in_file=args.input, out_file=args.output, digit=args.digit, from_tool=args.from_tool, fix_sample_name_by_fam=args.fix_sample_name_by_fam)
+
 
 if __name__ == '__main__':
     main()

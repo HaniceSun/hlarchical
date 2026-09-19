@@ -1,11 +1,109 @@
+"""Training, evaluation, and prediction driver for the hierarchical HLA imputation model."""
+
+from typing import Any
+
 from .dataset import *
 from .models import *
 from .utils import *
 
+
 class Trainer:
-    def __init__(self, config_file='config.yaml', model_name='mlp', train_file=None, val_file=None, test_file=None,
-                 with_ancestry=False, maps_file='maps.txt', masks_file='masks.txt',
-                 metrics_file=None, lr_lambda=None, print_every_n_batches=100):
+    """Orchestrates model construction, training, evaluation, and prediction.
+
+    On construction, ``Trainer`` loads a YAML config describing the model
+    architecture and hyperparameters, resolves the label maps / expert masks
+    files (falling back to the packaged with/without-ancestry data
+    directory when not found in the current directory), optionally loads
+    pre-saved train/val/test ``DataLoader`` objects, builds the model named
+    in the config via ``eval(...)`` on the configured class name, and sets
+    up the optimizer, loss function, optional LR scheduler, and optional
+    early stopping.
+
+    Attributes:
+        config: Parsed YAML config dict (``models.<model_name>.class`` and
+            ``models.<model_name>.params`` describe the model to build).
+        HLA: The eight HLA gene names handled by ``predict``'s digit-2
+            fallback table.
+        data_dir: Packaged data directory for the chosen ancestry mode
+            (``with_ancestry`` or ``without_ancestry``), used as a fallback
+            location for maps/masks/checkpoint files.
+        maps_file: Resolved path to the label maps file.
+        masks_file: Resolved path to the expert masks file, or ``None``.
+        train_dataset: Loaded training ``DataLoader``, or ``None``.
+        val_dataset: Loaded validation ``DataLoader``, or ``None``.
+        test_dataset: Loaded test ``DataLoader``, or ``None``.
+        model_name: Key of the model config used, e.g. ``"mlp"``.
+        device: ``torch.device`` selected (CUDA, MPS, or CPU).
+        model: The instantiated model (``nn.Module``), moved to ``device``.
+        optimizer: ``torch.optim.AdamW`` optimizer over ``model``'s
+            parameters.
+        loss_fn: ``CustomLoss`` instance used for training/validation.
+        print_every_n_batches: Batch-logging interval.
+        metrics_file: Path the per-epoch metrics table is appended to.
+        epochs: List of epoch indices recorded so far.
+        train_loss: Per-epoch average training loss.
+        val_loss: Per-epoch average validation loss.
+        test_loss: Per-epoch average test loss.
+        train_accuracy: Per-epoch training accuracy summaries.
+        val_accuracy: Per-epoch validation accuracy summaries.
+        test_accuracy: Per-epoch test accuracy summaries.
+        learning_rates: Per-epoch learning rate, if an LR scheduler is used.
+        lr_scheduler: Optional ``torch.optim.lr_scheduler.LambdaLR``
+            instance.
+        early_stopping: Optional ``EarlyStopping`` instance.
+        best_epochs: Best-epoch-so-far recorded at each early-stopping
+            check.
+    """
+
+    def __init__(
+        self,
+        config_file: str = 'config.yaml',
+        model_name: str = 'mlp',
+        train_file: str | None = None,
+        val_file: str | None = None,
+        test_file: str | None = None,
+        with_ancestry: bool = False,
+        maps_file: str = 'maps.txt',
+        masks_file: str | None = 'masks.txt',
+        metrics_file: str | None = None,
+        lr_lambda: list[float] | None = None,
+        print_every_n_batches: int = 100,
+    ) -> None:
+        """Loads config/data and builds the model, optimizer, and loss.
+
+        Args:
+            config_file: Path to a YAML file describing model architectures
+                and hyperparameters. If not found in the current directory,
+                it is looked up under the packaged config directory.
+            model_name: Key into ``config['models']`` selecting which model
+                architecture/hyperparameters to use.
+            train_file: Path to a saved training ``DataLoader`` (via
+                ``torch.save``). Skipped if ``None`` or missing.
+            val_file: Path to a saved validation ``DataLoader``. Skipped if
+                ``None`` or missing.
+            test_file: Path to a saved test ``DataLoader``. Skipped if
+                ``None`` or missing.
+            with_ancestry: Whether the model/data uses ancestry features;
+                selects which packaged data subdirectory is used as a
+                fallback for maps/masks/checkpoint files.
+            maps_file: Path to the label maps file (see ``Processor.make_maps``).
+            masks_file: Path to the expert masks file (see
+                ``Processor.make_masks``), or ``None`` to proceed without
+                masks (requires ``input_length`` in the model config).
+            metrics_file: Path to append per-epoch metrics to. Defaults to
+                ``f'{model_name}_metrics.txt'``.
+            lr_lambda: Per-epoch multiplicative LR factors indexed by epoch,
+                passed to ``torch.optim.lr_scheduler.LambdaLR``. Note:
+                ``LambdaLR`` is not imported in this module, so passing a
+                non-``None`` value here will raise ``NameError`` at
+                construction time (pre-existing behavior, unchanged here).
+            print_every_n_batches: How often (in batches) to print
+                progress during training/validation.
+
+        Raises:
+            FileNotFoundError: If ``maps_file`` or ``masks_file`` cannot be
+                found either as given or under the packaged data directory.
+        """
         self.config = self.load_yaml(config_file)
         self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
         if with_ancestry:
@@ -73,7 +171,19 @@ class Trainer:
             self.early_stopping = EarlyStopping()
         self.best_epochs = []
 
-    def train(self, epoch):
+    def train(self, epoch: int) -> None:
+        """Runs one training epoch over ``self.train_dataset``.
+
+        Updates model parameters via backpropagation, logs batch-level
+        loss every ``print_every_n_batches`` batches, saves a checkpoint
+        for this epoch, appends the epoch's average loss to
+        ``self.train_loss``/``self.epochs``, and records the current
+        learning rate if an LR scheduler is configured.
+
+        Args:
+            epoch: Index of the current epoch (used for logging and
+                checkpoint naming).
+        """
         self.model.train()
 
         loss_total = 0
@@ -100,7 +210,18 @@ class Trainer:
             self.learning_rates.append(lr)
         print(f'train epoch:{epoch} avg loss: {self.train_loss[-1]}')
 
-    def validate(self, epoch, test=False):
+    def validate(self, epoch: int, test: bool = False) -> None:
+        """Runs one evaluation pass (no gradient updates) and logs average loss.
+
+        Args:
+            epoch: Index of the current epoch (used for logging; also
+                appended to ``self.epochs`` when ``test=True``, since
+                ``test`` runs are not preceded by a ``train`` call in the
+                same epoch).
+            test: If ``True``, evaluate ``self.test_dataset`` and append to
+                ``self.test_loss`` instead of evaluating
+                ``self.val_dataset`` and appending to ``self.val_loss``.
+        """
         ds = 'val'
         dataset = self.val_dataset
         loss_list = self.val_loss
@@ -126,7 +247,23 @@ class Trainer:
         loss_list.append(loss_avg)
         print(f'{ds} epoch:{epoch} avg loss: {loss_list[-1]}')
 
-    def eval(self, epoch, test=False):
+    def eval(self, epoch: int, test: bool = False) -> None:
+        """Loads a checkpoint and computes per-head accuracy/AUROC/confusion metrics.
+
+        Loads the checkpoint for ``epoch``, computes, for every label head
+        defined in ``self.maps_file``, a ``CustomAccuracy``,
+        ``MulticlassAUROC``, and ``MulticlassConfusionMatrix`` over the
+        chosen dataset, prints per-head results, aggregates accuracy by
+        digit level via ``accuracy_avg_digit``, appends the formatted
+        digit-level accuracy summary to ``self.val_accuracy`` or
+        ``self.test_accuracy``, and calls ``self.log_metrics()``.
+
+        Args:
+            epoch: Index of the checkpoint epoch to load and evaluate.
+            test: If ``True``, evaluate ``self.test_dataset`` and append to
+                ``self.test_accuracy`` instead of ``self.val_dataset`` /
+                ``self.val_accuracy``.
+        """
         dataset = self.val_dataset
         accuracy = self.val_accuracy
         if test:
@@ -182,10 +319,48 @@ class Trainer:
         print(f'accuracy per digit: {acc}')
         self.log_metrics()
 
-    def test(self, epoch):
+    def test(self, epoch: int) -> None:
+        """Evaluates the test dataset for the given epoch.
+
+        Convenience wrapper around ``self.eval(epoch, test=True)``.
+
+        Args:
+            epoch: Index of the checkpoint epoch to load and evaluate.
+        """
         self.eval(epoch, test=True)
 
-    def predict(self, epoch=None, pred_file='to_predict.txt', out_file='predicted.txt', split_by_digit=True):
+    def predict(
+        self,
+        epoch: int | None = None,
+        pred_file: str = 'to_predict.txt',
+        out_file: str = 'predicted.txt',
+        split_by_digit: bool = True,
+    ) -> None:
+        """Predicts HLA alleles for samples in ``pred_file`` and writes results.
+
+        Loads the checkpoint for ``epoch``, reads the feature file
+        ``pred_file`` (same format produced by
+        ``Processor.get_sample_features``), runs the model per sample, and
+        writes ``SampleID``, ``HLA``, ``Allele1``, ``Allele2`` rows to
+        ``out_file`` for every head whose predicted class decodes to a
+        real allele (label 0 decodes to ``'.'`` and is skipped).
+
+        If ``split_by_digit`` is set, additionally builds a digit-2-level
+        table covering all eight HLA genes (with ``'.'`` placeholders for
+        genes absent from the model's heads), and iteratively resolves
+        digit-4/6/8 predictions from the previous digit level's output
+        file (``out_file`` with ``_digit{digit}`` inserted before the
+        extension), writing one file per digit level present in the
+        predictions.
+
+        Args:
+            epoch: Index of the checkpoint epoch to load.
+            pred_file: Path to the tab-separated feature file to predict
+                on.
+            out_file: Path to write the raw per-head predictions to.
+            split_by_digit: Whether to additionally emit digit-level
+                cascaded prediction files.
+        """
         df = pd.read_table(self.maps_file, header=0, sep='\t')
         maps = {}
         for n in range(df.shape[0]):
@@ -258,7 +433,17 @@ class Trainer:
                     df_out.columns = ['SampleID', 'HLA', 'Allele1', 'Allele2']
                     df_out.to_csv(out_file.replace('.txt', f'_digit{digit}.txt'), index=False, sep='\t')
 
-    def log_metrics(self):
+    def log_metrics(self) -> None:
+        """Appends the latest epoch's metrics to ``self.metrics_file`` and plots loss curves.
+
+        Builds a one-row (well, cumulative-history) table of epoch,
+        best_epoch, learning_rate, train/val/test loss, and train/val/test
+        accuracy, writing only the last row to ``self.metrics_file``
+        (creating it with a header if it doesn't exist, else appending).
+        If both training and validation loss have been recorded, also
+        (re)plots the train/val loss curves to a PNG alongside the
+        metrics file.
+        """
         cols = ['epoch', 'best_epoch', 'learning_rate',
                       'train_loss', 'val_loss', 'test_loss',
                       'train_accuracy', 'val_accuracy', 'test_accuracy']
@@ -302,9 +487,18 @@ class Trainer:
             plt.savefig(plot_file)
             plt.close()
 
-    def count_parameters(self, with_lazy=True, show_details=False):
+    def count_parameters(self, with_lazy: bool = True, show_details: bool = False) -> None:
+        """Prints the total number of trainable model parameters.
+
+        Args:
+            with_lazy: If ``True``, runs one forward pass first so that any
+                lazily-initialized layers (e.g. ``nn.LazyLinear``) have
+                their parameters materialized before counting.
+            show_details: If ``True``, also prints a per-parameter table of
+                name and element count.
+        """
         if with_lazy:
-            X,y = next(iter(self.train_dataset))
+            X, y = next(iter(self.train_dataset))
             X, y = X.to(self.device), y.to(self.device)
             pred = self.model.forward(X)
 
@@ -319,19 +513,41 @@ class Trainer:
             print(df)
         print(f'Total Trainable Parameters: {df["pnum"].sum()}')
 
-    def set_learning_rate(self, lr=1e-3):
+    def set_learning_rate(self, lr: float = 1e-3) -> None:
+        """Sets the learning rate on every optimizer parameter group.
+
+        Args:
+            lr: New learning rate to apply.
+        """
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = lr
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self, epoch: int) -> None:
+        """Saves model and optimizer state to ``f'{model_name}_ckpt_{epoch}.pt'``.
+
+        Args:
+            epoch: Epoch index used to construct the checkpoint filename.
+        """
         checkpoint = {
                 'model_state_dict': self.model.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 }
         out_file = f'{self.model_name}_ckpt_{epoch}.pt'
-        torch.save(checkpoint, out_file) 
+        torch.save(checkpoint, out_file)
 
-    def load_checkpoint(self, epoch):
+    def load_checkpoint(self, epoch: int) -> None:
+        """Loads model and optimizer state from a checkpoint file for the given epoch.
+
+        Looks for ``f'{model_name}_ckpt_{epoch}.pt'`` in the current
+        directory, falling back to ``self.data_dir``.
+
+        Args:
+            epoch: Epoch index used to construct the checkpoint filename.
+
+        Raises:
+            FileNotFoundError: If the checkpoint file cannot be found
+                either in the current directory or under ``self.data_dir``.
+        """
         ckpt_file = f'{self.model_name}_ckpt_{epoch}.pt'
         in_file = ckpt_file
         if not os.path.exists(ckpt_file):
@@ -343,7 +559,18 @@ class Trainer:
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    def load_yaml(self, config_file):
+    def load_yaml(self, config_file: str) -> dict[str, Any]:
+        """Loads and parses a YAML config file.
+
+        Args:
+            config_file: Path to the YAML config. If not found in the
+                current directory, it is looked up under the packaged
+                config directory (``config_dir``).
+
+        Returns:
+            The parsed YAML content as a dict, or an empty dict if loading
+            fails (the exception is caught and logged, not re-raised).
+        """
         if not os.path.exists(config_file):
             config_file = config_dir + '/' + config_file
             print(f'using config {config_file}')
@@ -355,7 +582,29 @@ class Trainer:
         except Exception as e:
             print(f'Error loading config file {e}')
 
-    def run(self, resume_epoch=None, start_epoch=0, end_epoch=10, validate=True):
+    def run(
+        self,
+        resume_epoch: int | None = None,
+        start_epoch: int = 0,
+        end_epoch: int = 10,
+        validate: bool = True,
+    ) -> None:
+        """Runs the full training loop from ``start_epoch`` to ``end_epoch``.
+
+        For each epoch, trains one pass, optionally validates and checks
+        early stopping, steps the LR scheduler if configured, and logs
+        metrics. If ``resume_epoch`` is given, loads that checkpoint first
+        and continues training from the following epoch.
+
+        Args:
+            resume_epoch: If given, load this epoch's checkpoint before
+                training and set ``start_epoch`` to ``resume_epoch + 1``.
+            start_epoch: First epoch index to train (inclusive), unless
+                overridden by ``resume_epoch``.
+            end_epoch: Last epoch index to train (exclusive).
+            validate: Whether to run validation and early-stopping checks
+                after each training epoch.
+        """
         if resume_epoch is not None:
             self.load_checkpoint(resume_epoch)
             start_epoch = resume_epoch + 1
@@ -376,6 +625,7 @@ class Trainer:
                 self.lr_scheduler.step()
 
             self.log_metrics()
+
 
 if __name__ == '__main__':
     trainer = Trainer()

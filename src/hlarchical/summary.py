@@ -1,10 +1,96 @@
 from .utils import *
 
-class Summary():
-    def __init__(self):
-        self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def get_hlarchical_table(self, in_file='', in_dir='HLA-HD', out_file='1000G_WGS_HLA-HD.txt', digit=4, from_tool='hla-hd', fix_sample_name_by_fam=None):
+class Summary():
+    """Aggregate, reformat, and score HLA typing/imputation results from multiple tools.
+
+    Provides utilities to convert the native output formats of several HLA
+    typing/imputation tools (SNP2HLA, DEEP*HLA, HIBAG, HLA-HD, xHLA, OptiType,
+    the Michigan Imputation Server, and a couple of internal spreadsheet
+    formats) into a common long-format table with columns
+    ``SampleID, HLA, Allele1, Allele2`` (the "hlarchical table" format), merge
+    such tables across tools/ancestries into one wide comparison table, score
+    genotyping calls against a typing ground truth, and plot the resulting
+    accuracy scores.
+
+    Attributes:
+        HLA: The eight classical HLA genes handled throughout the class, in a
+            fixed, consistent order.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the fixed list of classical HLA genes handled by this class."""
+        self.HLA = [
+            'HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1',
+            'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1',
+        ]
+
+    def get_hlarchical_table(
+        self,
+        in_file: str = '',
+        in_dir: str = 'HLA-HD',
+        out_file: str = '1000G_WGS_HLA-HD.txt',
+        digit: int = 4,
+        from_tool: str = 'hla-hd',
+        fix_sample_name_by_fam: str | None = None,
+    ) -> None:
+        """Convert a single HLA typing/imputation tool's native output into the hlarchical table format.
+
+        Dispatches on ``from_tool`` to one of several parsing branches, each
+        of which reads that tool's native output format and writes a common
+        long-format table (``SampleID, HLA, Allele1, Allele2``, plus extra
+        demographic columns for the two internal spreadsheet formats) to
+        ``out_file``. The expected input per branch is:
+
+        - ``in_file`` ending in ``.phased`` with ``from_tool='snp2hla'``: a
+          SNP2HLA Beagle ``.bgl.phased`` file (space-delimited, one header
+          row, HLA allele markers prefixed with ``HLA``).
+        - ``in_file`` ending in ``.phased`` with ``from_tool='deep-hla'``: a
+          DEEP*HLA ``.deephla.phased`` file (tab-delimited, no header, with
+          sample IDs recovered from a sibling ``_SNP2HLA.fam`` file).
+        - ``from_tool='hibag'``: a HIBAG prediction TSV with
+          ``sample.id, HLA, allele1, allele2`` columns.
+        - ``from_tool='hla-hd'``: an ``in_dir`` tree of HLA-HD
+          ``result/*.est.txt`` files (one per sample and gene).
+        - ``from_tool='xhla'``: an ``in_dir`` tree of xHLA
+          ``*-hla.json`` report files.
+        - ``from_tool='opti-type'``: an ``in_dir`` tree of OptiType
+          ``*_result.tsv`` files.
+        - ``from_tool='michigan-server'``: a gzip-compressed Michigan
+          Imputation Server VCF with ``HLA*`` imputed markers and ``R2``/
+          dosage ``FORMAT`` fields.
+        - ``from_tool='hla-typing-stanford'``: an internal Excel spreadsheet
+          with paired allele rows and ``IMGT/<gene>`` columns.
+        - ``from_tool='hla-typing-iidp'``: an internal TSV with
+          ``hla_a``/``hla_b``/``hla_c``/``hla_dq``/``hla_dr`` columns (IIDP
+          typing only covers HLA-A/B/C/DQB1/DRB1; DPA1/DPB1/DQA1 are always
+          written as untyped).
+
+        Args:
+            in_file: Path to the tool's native output file. Only used by the
+                ``.phased``, ``hibag``, and ``michigan-server``/
+                ``hla-typing-stanford``/``hla-typing-iidp`` branches.
+            in_dir: Directory tree to search for per-sample result files.
+                Only used by the ``hla-hd``, ``xhla``, and ``opti-type``
+                branches.
+            out_file: Output path for the reformatted hlarchical table.
+            digit: Target allele resolution in digits (e.g. ``2`` or ``4``).
+            from_tool: Which tool's output format to parse. One of
+                ``'snp2hla'``, ``'deep-hla'``, ``'hibag'``, ``'hla-hd'``,
+                ``'xhla'``, ``'opti-type'``, ``'michigan-server'``,
+                ``'hla-typing-stanford'``, ``'hla-typing-iidp'``.
+            fix_sample_name_by_fam: Optional path to a PLINK ``.fam`` file
+                used to remap sample IDs via :meth:`_fix_sample_name_by_fam`
+                before writing output.
+
+        Returns:
+            None. Writes the reformatted table to ``out_file`` (and, for the
+            ``.phased`` branches and most tool branches, prints a
+            confirmation message).
+
+        Raises:
+            ValueError: If ``from_tool`` is not one of the supported values.
+        """
         D = {}
         if fix_sample_name_by_fam is not None and os.path.exists(fix_sample_name_by_fam):
             D = self._fix_sample_name_by_fam(fix_sample_name_by_fam)
@@ -21,20 +107,22 @@ class Summary():
                 skiprows = 0
                 col = 0
                 in_header = None
-                samples = pd.read_table(in_file.replace('.deephla.phased', '_SNP2HLA.fam'), sep=' ', header=None).iloc[:, 1].tolist()
+                samples = pd.read_table(
+                    in_file.replace('.deephla.phased', '_SNP2HLA.fam'), sep=' ', header=None
+                ).iloc[:, 1].tolist()
 
             df = pd.read_table(in_file, sep=sep, skiprows=skiprows, header=in_header)
-            df = df.loc[df.iloc[:, col].str.startswith('HLA'), ]
+            df = df.loc[df.iloc[:, col].str.startswith('HLA')]
 
             wh = [len(x.split('_')[2]) == digit for x in df.iloc[:, col]]
-            df = df.loc[wh, ]
+            df = df.loc[wh]
 
             L = []
             for n in range(col + 1, df.shape[1], 2):
                 if from_tool == 'snp2hla':
                     sample_id = df.columns[n]
                 elif from_tool == 'deep-hla':
-                    sample_id = samples[int((n-col)/2)]
+                    sample_id = samples[int((n - col) / 2)]
                 allele1 = {}
                 allele2 = {}
                 for m in range(df.shape[0]):
@@ -51,7 +139,10 @@ class Summary():
                         allele2[k].append(':'.join([k] + fields[2:]))
 
                 for hla in self.HLA:
-                    L.append([D.get(sample_id, sample_id), hla, ','.join(allele1.get(hla, '.')), ','.join(allele2.get(hla, '.'))])
+                    L.append([
+                        D.get(sample_id, sample_id), hla,
+                        ','.join(allele1.get(hla, '.')), ','.join(allele2.get(hla, '.')),
+                    ])
 
             df = pd.DataFrame(L)
             df.columns = header
@@ -85,30 +176,34 @@ class Summary():
                 if df.shape[0] > 0 and df.shape[1] > 1:
                     item1 = df.iloc[0, 0].split(',')
                     item2 = df.iloc[0, 1].split(',')
-                    item1x = set([':'.join(x.replace('*', ':').split(':')[0:int(digit/2) + 1]) for x in item1])
-                    item2x = set([':'.join(x.replace('*', ':').split(':')[0:int(digit/2) + 1]) for x in item2])
+                    item1x = set([':'.join(x.replace('*', ':').split(':')[0:int(digit / 2) + 1]) for x in item1])
+                    item2x = set([':'.join(x.replace('*', ':').split(':')[0:int(digit / 2) + 1]) for x in item2])
                     if len(item1x) > 1 or len(item2x) > 1:
-                        print(f'Warning: multiple alleles found for sample {sample} and HLA {hla} in file {f}. Only the first allele will be used. Allele1: {item1}, Allele2: {item2}', flush=True)
+                        print(
+                            f'Warning: multiple alleles found for sample {sample} and HLA {hla} in file {f}. '
+                            f'Only the first allele will be used. Allele1: {item1}, Allele2: {item2}',
+                            flush=True,
+                        )
 
                     allele1 = item1[0]
                     allele2 = item2[0]
                     allele1 = allele1.replace('*', ':')
                     allele2 = allele2.replace('*', ':')
-        
+
                     a1 = allele1.split(':')
                     a2 = allele2.split(':')
-                    allele1 = ':'.join(a1[0:int(digit/2) + 1])
-                    allele2 = ':'.join(a2[0:int(digit/2) + 1])
+                    allele1 = ':'.join(a1[0:int(digit / 2) + 1])
+                    allele2 = ':'.join(a2[0:int(digit / 2) + 1])
 
                     if allele2 == '-':
                         allele2 = allele1
 
-                    if len(allele1.split(':')) < int(digit/2) + 1:
+                    if len(allele1.split(':')) < int(digit / 2) + 1:
                         allele1 = '.'
-                    if len(allele2.split(':')) < int(digit/2) + 1:
+                    if len(allele2.split(':')) < int(digit / 2) + 1:
                         allele2 = '.'
                     D[sample][hla] = [allele1, allele2]
-        
+
             L = []
             for sample in sorted(D):
                 for hla in self.HLA:
@@ -137,18 +232,18 @@ class Summary():
                         allele2 = 'HLA-' + L[n + 1]
                         allele1 = allele1.replace('*', ':')
                         allele2 = allele2.replace('*', ':')
-        
+
                         a1 = allele1.split(':')
                         a2 = allele2.split(':')
-        
-                        allele1 = ':'.join(a1[0:int(digit/2) + 1])
-                        allele2 = ':'.join(a2[0:int(digit/2) + 1])
-                        if len(allele1.split(':')) < int(digit/2) + 1:
+
+                        allele1 = ':'.join(a1[0:int(digit / 2) + 1])
+                        allele2 = ':'.join(a2[0:int(digit / 2) + 1])
+                        if len(allele1.split(':')) < int(digit / 2) + 1:
                             allele1 = '.'
-                        if len(allele2.split(':')) < int(digit/2) + 1:
+                        if len(allele2.split(':')) < int(digit / 2) + 1:
                             allele2 = '.'
                         D[sample][hla] = [allele1, allele2]
-        
+
             L = []
             header = ['SampleID', 'HLA', 'Allele1', 'Allele2']
             for sample in sorted(D):
@@ -178,18 +273,18 @@ class Summary():
                         allele2 = 'HLA-' + df.iloc[0, n + 1]
                         allele1 = allele1.replace('*', ':')
                         allele2 = allele2.replace('*', ':')
-        
+
                         a1 = allele1.split(':')
                         a2 = allele2.split(':')
-        
-                        allele1 = ':'.join(a1[0:int(digit/2) + 1])
-                        allele2 = ':'.join(a2[0:int(digit/2) + 1])
-                        if len(allele1.split(':')) < int(digit/2) + 1:
+
+                        allele1 = ':'.join(a1[0:int(digit / 2) + 1])
+                        allele2 = ':'.join(a2[0:int(digit / 2) + 1])
+                        if len(allele1.split(':')) < int(digit / 2) + 1:
                             allele1 = '.'
-                        if len(allele2.split(':')) < int(digit/2) + 1:
+                        if len(allele2.split(':')) < int(digit / 2) + 1:
                             allele2 = '.'
                         D[sample][hla] = [allele1, allele2]
-        
+
             L = []
             for sample in sorted(D):
                 for hla in self.HLA:
@@ -231,7 +326,7 @@ class Summary():
             for sample in D:
                 for gene in D[sample]:
                     for gt in D[sample][gene]:
-                        D[sample][gene][gt] = sorted(D[sample][gene][gt], key=lambda x:x[1], reverse=True)
+                        D[sample][gene][gt] = sorted(D[sample][gene][gt], key=lambda x: x[1], reverse=True)
 
             L = []
             for sample in D:
@@ -248,14 +343,14 @@ class Summary():
                             elif gt in ['1|0', '1/0']:
                                 allele2 = D[sample][gene][gt][0][0]
                     L.append([sample, gene, allele1, allele2])
-            df = pd.DataFrame(L, columns = ['SampleID', 'HLA', 'Allele1', 'Allele2'])
+            df = pd.DataFrame(L, columns=['SampleID', 'HLA', 'Allele1', 'Allele2'])
             df.to_csv(out_file, header=True, index=False, sep='\t')
 
         elif from_tool == 'hla-typing-stanford':
             # internal use only
             df = pd.read_excel(in_file, dtype=str, skiprows=2)
             header = ['SampleID', 'Race', 'Gender', 'Disease', 'HLA', 'Allele1', 'Allele2']
-        
+
             HLAidx = {}
             HLAidx['HLA-A'] = list(df.columns).index('IMGT/A')
             HLAidx['HLA-B'] = list(df.columns).index('IMGT/B')
@@ -265,14 +360,14 @@ class Summary():
             HLAidx['HLA-DQA1'] = list(df.columns).index('IMGT/DQA1')
             HLAidx['HLA-DQB1'] = list(df.columns).index('IMGT/DQB1')
             HLAidx['HLA-DRB1'] = list(df.columns).index('IMGT/DRB1')
-        
+
             L = []
             for n in range(0, df.shape[0], 2):
                 sample_id = df.iloc[n, 0]
                 race = df.iloc[n, 1]
                 gender = df.iloc[n, 2].lower().strip()
                 disease = df.iloc[n, 3].lower().strip()
-        
+
                 for k in HLAidx.keys():
                     hla = k
                     allele1 = df.iloc[n, HLAidx[k]]
@@ -311,12 +406,12 @@ class Summary():
                                 gender = 'male'
                             elif k == 2:
                                 gender = 'female'
-                    except:
+                    except Exception:
                         k = '.'
                 for k in [age, height, weight, bmi]:
                     try:
                         k = float(k)
-                    except:
+                    except Exception:
                         k = '.'
 
                 hla_a_a1 = self._fix_hla_allele_iidp(df['hla_a'].iloc[n], self.HLA[0])
@@ -345,19 +440,44 @@ class Summary():
 
                 hla_dqb1_a1 = self._fix_hla_allele_iidp(df['hla_dq'].iloc[n], self.HLA[6])
                 hla_dqb1_a2 = self._fix_hla_allele_iidp(df['hla_dq_1'].iloc[n], self.HLA[6])
-                L.append([rrid, gender, race, ethnicity, age, height, weight, bmi, self.HLA[6], hla_dqb1_a1, hla_dqb1_a2])
+                L.append(
+                    [rrid, gender, race, ethnicity, age, height, weight, bmi, self.HLA[6], hla_dqb1_a1, hla_dqb1_a2]
+                )
 
                 hla_drb1_a1 = self._fix_hla_allele_iidp(df['hla_dr'].iloc[n], self.HLA[7])
                 hla_drb1_a2 = self._fix_hla_allele_iidp(df['hla_dr_1'].iloc[n], self.HLA[7])
-                L.append([rrid, gender, race, ethnicity, age, height, weight, bmi, self.HLA[7], hla_drb1_a1, hla_drb1_a2])
+                L.append(
+                    [rrid, gender, race, ethnicity, age, height, weight, bmi, self.HLA[7], hla_drb1_a1, hla_drb1_a2]
+                )
 
             df = pd.DataFrame(L)
-            df.columns = ['RRID', 'Gender', 'Race', 'Ethnicity', 'Age', 'Height', 'Weight', 'BMI', 'HLA', 'Allele1', 'Allele2']
+            df.columns = [
+                'RRID', 'Gender', 'Race', 'Ethnicity', 'Age', 'Height', 'Weight', 'BMI',
+                'HLA', 'Allele1', 'Allele2',
+            ]
             df.to_csv(out_file, header=True, index=False, sep='\t')
         else:
             raise ValueError(f'Unsupported tool: {from_tool}.')
 
-    def _fix_sample_name_by_fam(self, fam_file):
+    def _fix_sample_name_by_fam(self, fam_file: str) -> dict[str, str]:
+        """Build a sample-ID remapping table from a PLINK ``.fam`` file.
+
+        Maps both the bare individual ID (``IID``) and the ``FID-IID``
+        combination to the canonical ``FID_IID`` sample name, so that sample
+        names appearing in tool output under either convention can be
+        normalized. If the same key maps to multiple ``FID_IID`` values, the
+        first is kept as the primary mapping and the others are additionally
+        registered under disambiguated keys (``key.2``, ``key.3``, ...).
+
+        Args:
+            fam_file: Path to a space-delimited PLINK ``.fam`` file, whose
+                first two whitespace-delimited columns are ``FID`` and
+                ``IID``.
+
+        Returns:
+            A dict mapping ``IID`` and ``FID-IID`` (and any disambiguated
+            variants) to the canonical ``FID_IID`` sample name.
+        """
         D1 = {}
         D2 = {}
         df = pd.read_table(fam_file, header=None, sep=' ')
@@ -377,11 +497,29 @@ class Summary():
             else:
                 D2[k] = D1[k][0]
                 for n in range(1, len(D1[k])):
-                    k2 = f'{k}.{n+1}'
+                    k2 = f'{k}.{n + 1}'
                     D2[k2] = D1[k][n]
         return D2
 
-    def _fix_hla_allele_iidp(self, allele, hla):
+    def _fix_hla_allele_iidp(self, allele: object, hla: str) -> str:
+        """Normalize a raw IIDP-format allele code into an ``hlarchical`` 2-digit allele string.
+
+        Strips any ``:``-suffixed sub-allele detail, strips a leading
+        ``A``/``B``/``C`` gene-letter prefix, and coerces the remaining
+        numeric code to a zero-padded 2-digit allele, e.g. ``1`` -> ``'01'``,
+        ``102`` -> a 4-digit code truncated to its first two digits.
+
+        Args:
+            allele: The raw allele value from the IIDP table (may be a
+                string, number, or ``NaN``; coerced to ``str`` internally).
+            hla: The HLA gene name (e.g. ``'HLA-A'``) to prefix onto the
+                normalized allele.
+
+        Returns:
+            The normalized allele string in ``'<hla>:<2-digit code>'`` form,
+            or ``'.'`` if the value is missing, zero, or not parseable as an
+            integer.
+        """
         allele = str(allele)
         if allele.find(':') != -1:
             allele = allele.split(':')[0]
@@ -395,14 +533,64 @@ class Summary():
                 allele = f'0{allele}'
             elif len(allele) == 4:
                 allele = allele[0:2]
-        except:
+        except Exception:
             allele = '.'
         if allele not in ['.']:
             allele = f'{hla}:{allele}'
         return allele
 
-    def merge_hlarchical_tables(self, out_file='HLA_OMNI-GDA_withGAP.txt', digits=[2, 4], tools=['SNP2HLA', 'HIBAG', 'hlarchical'],
-                                Ancestry=['European', 'Asian', 'African', 'Hispanic', 'MA'], ancestry_file='GAP_OMNI-GDA.txt'):
+    def merge_hlarchical_tables(
+        self,
+        out_file: str = 'HLA_OMNI-GDA_withGAP.txt',
+        digits: list[int] = [2, 4],
+        tools: list[str] = ['SNP2HLA', 'HIBAG', 'hlarchical'],
+        Ancestry: list[str] = ['European', 'Asian', 'African', 'Hispanic', 'MA'],
+        ancestry_file: str = 'GAP_OMNI-GDA.txt',
+    ) -> None:
+        """Merge per-tool, per-ancestry hlarchical tables into one wide comparison table.
+
+        For each ``(digit, tool, ancestry)`` combination, reads
+        ``HLA_OMNI-GDA_{ancestry}_{tool}_digit{digit}.txt`` (if present) and
+        indexes its ``Allele1``/``Allele2`` calls by ``(SampleID, HLA)``.
+        Sample metadata (name, array, source, sex, batch, project, RRID, QC,
+        extra, superpopulation, population) is read from ``ancestry_file``
+        and used both to order/annotate output rows and to select, per tool,
+        which ancestry-specific table a given sample's superpopulation maps
+        to:
+
+        - ``tool`` in ``{'SNP2HLA', 'DEEPHLA'}``: ``EUR`` -> ``'European'``;
+          ``EAS``/``SAS`` -> ``'Asian'``; anything else -> ``'European'``.
+        - ``tool == 'HIBAG'``: ``EUR`` -> ``'European'``; ``EAS``/``SAS`` ->
+          ``'Asian'``; ``AFR`` -> ``'African'``; ``AMR`` -> ``'Hispanic'``;
+          anything else -> ``'European'``.
+        - ``tool`` containing ``'michigan'`` (case-insensitive) or
+          ``'hlarchical'``: always ``'MA'``.
+        - Any other ``tool`` value: raises ``ValueError``.
+
+        The resulting wide table has one row per ``(sample, HLA gene)`` and
+        two allele columns per ``(tool, digit)`` combination.
+
+        Args:
+            out_file: Output path for the merged wide table.
+            digits: Allele resolutions (in digits) to include as separate
+                column groups.
+            tools: Tool names to include as separate column groups; must
+                each be resolvable by the ancestry-mapping rules above.
+            Ancestry: Ancestry labels used to locate per-ancestry input
+                files (independent of the ``Ancestry`` values used in the
+                per-tool ancestry-selection rules above).
+            ancestry_file: Path to a sample metadata/ancestry TSV with
+                columns ``SampleID, SampleName, Array, Source, Sex, Batch,
+                Project, RRID, QC, Extra, Superpopulation, Population``. If
+                missing, output rows carry no sample metadata.
+
+        Returns:
+            None. Writes the merged wide table to ``out_file``.
+
+        Raises:
+            ValueError: If a tool in ``tools`` does not match any of the
+                known ancestry-mapping rules.
+        """
         D = {}
         for digit in digits:
             D.setdefault(digit, {})
@@ -437,12 +625,18 @@ class Summary():
                 extra = df['Extra'].iloc[n]
                 superpopulation = df['Superpopulation'].iloc[n]
                 population = df['Population'].iloc[n]
-                SA[sample_id] = [sample_name, array, source, sex, batch, project, rrid, qc, extra, superpopulation, population]
+                SA[sample_id] = [
+                    sample_name, array, source, sex, batch, project, rrid, qc, extra,
+                    superpopulation, population,
+                ]
         else:
             print('Ancestry not used', flush=True)
 
         Ls = []
-        cols = ['SampleID', 'SampleName', 'Array', 'Source', 'Sex', 'Batch', 'Project', 'RRID', 'QC', 'Extra', 'Superpopulation', 'Population', 'HLA']
+        cols = [
+            'SampleID', 'SampleName', 'Array', 'Source', 'Sex', 'Batch', 'Project', 'RRID',
+            'QC', 'Extra', 'Superpopulation', 'Population', 'HLA',
+        ]
         sa = sorted(SA.items(), key=lambda x: [x[1][0], x[0]])
         sample_ids = [item[0] for item in sa]
         for sample_id in sample_ids:
@@ -460,12 +654,15 @@ class Summary():
             population = v[10]
 
             for hla in self.HLA:
-                L = [sample_id, sample_name, array, source, sex, batch, project, rrid, qc, extra, superpopulation, population, hla]
+                L = [
+                    sample_id, sample_name, array, source, sex, batch, project, rrid, qc,
+                    extra, superpopulation, population, hla,
+                ]
                 for digit in digits:
                     for tool in tools:
                         if sample_id == sample_ids[0] and hla == self.HLA[0]:
                             cols += [f'Allele1_{tool}_digit{digit}', f'Allele2_{tool}_digit{digit}']
-    
+
                         if tool in ['SNP2HLA', 'DEEPHLA']:
                             if superpopulation in ['EUR']:
                                 ancestry = 'European'
@@ -502,7 +699,30 @@ class Summary():
         df.columns = cols
         df.to_csv(out_file, sep='\t', index=False)
 
-    def hla_typing_genotyping_scoring(self, in_file):
+    def hla_typing_genotyping_scoring(self, in_file: str) -> None:
+        """Score genotyping-derived HLA calls against a typing ground truth.
+
+        Reads a merged wide table (as produced by
+        :meth:`merge_hlarchical_tables`, with a ``Allele1_typing``/
+        ``Allele2_typing`` ground-truth column pair followed by
+        ``Allele1_<method>``/``Allele2_<method>`` genotyping column pairs)
+        and computes, per row, a ``'<correct>/<typed>'`` score for each
+        genotyping method via :meth:`_cal_score`. Also aggregates overall
+        and per-ancestry (``Superpopulation``) accuracy per HLA gene and
+        method.
+
+        Args:
+            in_file: Path to the input wide table (tab-separated, with a
+                header), with genotyping-method allele column pairs starting
+                at column index 11.
+
+        Returns:
+            None. Writes three tables: the per-row scored table to
+            ``in_file`` with ``.txt`` replaced by ``_score.txt``, the
+            overall per-HLA/method accuracy to ``..._score_overall.txt``,
+            and the per-HLA/method/ancestry accuracy to
+            ``..._score_ancestry.txt``.
+        """
         out_file = in_file.replace('.txt', '_score.txt')
         out_file_overall = in_file.replace('.txt', '_score_overall.txt')
         out_file_ancestry = in_file.replace('.txt', '_score_ancestry.txt')
@@ -516,8 +736,8 @@ class Summary():
                 typ_a1 = df['Allele1_typing'].iloc[n]
                 typ_a2 = df['Allele2_typing'].iloc[n]
                 if typ_a1 not in ['.', 'X']:
-                    typ_a1 = ':'.join(typ_a1.split(':')[0:int(digit/2)+1])
-                    typ_a2 = ':'.join(typ_a2.split(':')[0:int(digit/2)+1])
+                    typ_a1 = ':'.join(typ_a1.split(':')[0:int(digit / 2) + 1])
+                    typ_a2 = ':'.join(typ_a2.split(':')[0:int(digit / 2) + 1])
                 geno_a1 = df.iloc[n, m]
                 geno_a2 = df.iloc[n, m + 1]
                 t, g = self._cal_score(typ_a1, typ_a2, geno_a1, geno_a2)
@@ -525,7 +745,7 @@ class Summary():
                 if n == 0:
                     cols.append(df.columns[m].replace('Allele1', 'score'))
             Ls.append(L)
-        df = pd.DataFrame(Ls) 
+        df = pd.DataFrame(Ls)
         df.columns = cols
         df.to_csv(out_file, sep='\t', index=False, header=True)
 
@@ -534,14 +754,14 @@ class Summary():
             if df.columns[n].startswith('score_'):
                 score_idx.append(n)
 
-        # overall score for each HLA	
+        # overall score for each HLA
         L = []
         for hla in df['HLA'].unique():
             df2 = df.loc[df['HLA'] == hla]
             for idx in score_idx:
                 score_sum = df2.iloc[:, idx].apply(lambda x: int(x.split('/')[0])).sum()
                 total_sum = df2.iloc[:, idx].apply(lambda x: int(x.split('/')[1])).sum()
-                L.append([hla, df.columns[idx].replace('score_', ''), f'{score_sum/total_sum:4f}', score_sum, total_sum])
+                L.append([hla, df.columns[idx].replace('score_', ''), f'{score_sum / total_sum:4f}', score_sum, total_sum])
         df_overall = pd.DataFrame(L)
         df_overall.columns = ['HLA', 'method', 'score', 'genotyping', 'typing']
         df_overall.to_csv(out_file_overall, sep='\t', index=False, header=True)
@@ -555,12 +775,50 @@ class Summary():
                 for idx in score_idx:
                     score_sum = df3.iloc[:, idx].apply(lambda x: int(x.split('/')[0])).sum()
                     total_sum = df3.iloc[:, idx].apply(lambda x: int(x.split('/')[1])).sum()
-                    L.append([hla, ancestry, df.columns[idx].replace('score_', ''), f'{score_sum/total_sum:4f}', score_sum, total_sum])
+                    L.append([
+                        hla, ancestry, df.columns[idx].replace('score_', ''),
+                        f'{score_sum / total_sum:4f}', score_sum, total_sum,
+                    ])
         df_ancestry = pd.DataFrame(L)
         df_ancestry.columns = ['HLA', 'ancestry', 'method', 'score', 'genotyping', 'typing']
         df_ancestry.to_csv(out_file_ancestry, sep='\t', index=False, header=True)
 
-    def bar_plot_score(self, in_file, digits=[2, 4], methods=['SNP2HLA', 'HIBAG', 'hlarchicalMLPwithAncestry', 'hlarchicalMLPwithoutAncestry', 'hlarchicalMLPm12'], cmap='colorblind'):
+    def bar_plot_score(
+        self,
+        in_file: str,
+        digits: list[int] = [2, 4],
+        methods: list[str] = [
+            'SNP2HLA', 'HIBAG', 'hlarchicalMLPwithAncestry',
+            'hlarchicalMLPwithoutAncestry', 'hlarchicalMLPm12',
+        ],
+        cmap: str = 'colorblind',
+    ) -> None:
+        """Plot per-HLA-gene genotyping accuracy bar charts from a scored overall/ancestry table.
+
+        For each ``(digit, method)`` combination, filters rows where
+        ``method`` equals ``'{method}_digit{digit}'`` and draws a bar plot of
+        ``score`` by ``HLA`` gene (grouped/colored by ``ancestry`` if that
+        column is present), annotating the plot title with the overall
+        average accuracy and printing both the overall average and the
+        average excluding ``HLA-DPA1`` (which tends to be poorly typed).
+
+        Args:
+            in_file: Path to a scored table (as produced by
+                :meth:`hla_typing_genotyping_scoring`), with columns
+                including ``HLA``, ``method``, ``score``, ``genotyping``,
+                ``typing``, and optionally ``ancestry``.
+            digits: Allele resolutions (in digits) to plot separately.
+            methods: Method name prefixes (before the ``_digit{digit}``
+                suffix) to plot separately.
+            cmap: Seaborn/matplotlib palette name used for bar (and, if
+                applicable, ancestry hue) coloring.
+
+        Returns:
+            None. Saves one PDF and one PNG bar plot per
+            ``(digit, method)`` combination, named
+            ``{in_file}_{method}_digit{digit}_barplot.{pdf,png}``, and
+            prints the average-accuracy summary lines.
+        """
         df = pd.read_table(in_file, header=0, sep='\t')
         for digit in digits:
             for method in methods:
@@ -594,13 +852,29 @@ class Summary():
                 plt.close()
                 print('Bar plot saved to', out_file)
 
-    def _cal_score(self, ta1, ta2, ga1, ga2):
+    def _cal_score(self, ta1: str, ta2: str, ga1: str, ga2: str) -> tuple[int, int]:
+        """Compare a typed allele pair against a genotyped allele pair for one sample/HLA/method.
+
+        Args:
+            ta1: First typing (ground-truth) allele.
+            ta2: Second typing (ground-truth) allele.
+            ga1: First genotyping (predicted) allele.
+            ga2: Second genotyping (predicted) allele.
+
+        Returns:
+            A ``(t, g)`` tuple where ``t`` is the number of typed alleles
+            considered valid (not ``'.'``/``'X'`` and not containing
+            ``'--'``), and ``g`` is the number of genotyped alleles that
+            match one of the typed alleles, capped at ``t`` and further
+            capped at 1 if the sample is genotyped as homozygous
+            (``ga1 == ga2``) but typed as heterozygous (``ta1 != ta2``).
+        """
         t = 0
         g = 0
         for x in [ta1, ta2]:
             if x not in ['.', 'X'] and x.find('--') == -1:
                 t += 1
-    
+
         for x in [ga1, ga2]:
             if x not in ['.', 'X']:
                 if x in [ta1, ta2]:
