@@ -28,7 +28,7 @@ class AssociationDiseaseHLA():
         """Initialize the list of HLA genes handled by this class."""
         self.HLA = ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DPA1', 'HLA-DPB1', 'HLA-DQA1', 'HLA-DQB1', 'HLA-DRB1']
 
-    def preprocess(self, in_file: str, digit: int = 2) -> None:
+    def preprocess(self, in_file: str, digit: int = 2, encoding='binary') -> None:
         """Split an hlarchical table by HLA gene and binary-encode alleles.
 
         Reads a long-format hlarchical table (columns including ``HLA``,
@@ -40,13 +40,19 @@ class AssociationDiseaseHLA():
             in_file: Path to the input tab-separated hlarchical table.
             digit: Allele resolution (in "digits", e.g. 2 or 4) at which to
                 truncate/group alleles before encoding.
+            encoding: Encoding method to use, currently only supports ``'binary'`` and ``'binomial'``.
         """
         df = pd.read_table(in_file, header=0, sep='\t')
         for hla in self.HLA:
             df2 = df[df['HLA'] == hla].copy()
-            df2 = self.allele_binary_encoding(df2, digit=digit)
-            out_file = in_file.replace('.txt', f'_{hla}_digit{digit}.txt')
-            df2.to_csv(out_file, index=False, sep='\t')
+            if encoding == 'binary':
+                df2 = self.allele_binary_encoding(df2, digit=digit)
+                out_file = in_file.replace('.txt', f'_{hla}_digit{digit}.txt')
+                df2.to_csv(out_file, index=False, sep='\t')
+            elif encoding == 'binomial':
+                df2 = self.allele_binomial_encoding(df2, digit=digit)
+                out_file = in_file.replace('.txt', f'_{hla}_digit{digit}_binomial.txt')
+                df2.to_csv(out_file, index=False, sep='\t')
 
     def allele_binary_encoding(self, df: pd.DataFrame, digit: int = 2) -> pd.DataFrame:
         """Encode alleles in ``Allele1``/``Allele2`` as per-allele dosage columns.
@@ -103,6 +109,44 @@ class AssociationDiseaseHLA():
                     nA += 1
                 L.append(nA)
             df[allele] = L
+        return df
+
+    def allele_binomial_encoding(self, df: pd.DataFrame, digit: int = 2) -> pd.DataFrame:
+        D = {}
+        A = []
+        for n in range(df.shape[0]):
+            donor = df.iloc[n]['DonorID']
+            ancestry = df.iloc[n]['Ancestry']
+            allele1 = df.iloc[n]['Allele1']
+            allele2 = df.iloc[n]['Allele2']
+            a1 = '.'
+            a2 = '.'
+            if allele1 not in ['.', 'X']:
+                a1 = ':'.join(allele1.split(':')[0:int(digit / 2) + 1])
+                if a1.find('--') != -1:
+                    a1 = '.'
+            if allele2 not in ['.', 'X']:
+                a2 = ':'.join(allele2.split(':')[0:int(digit / 2) + 1])
+                if a2.find('--') != -1:
+                    a2 = '.'
+            D.setdefault(ancestry, {})
+            D[ancestry].setdefault('donor', set())
+            D[ancestry]['donor'].add(donor)
+            if a1 != '.':
+                D[ancestry].setdefault(a1, 0)
+                D[ancestry][a1] += 1
+                A.append(a1)
+            if a2 != '.':
+                D[ancestry].setdefault(a2, 0)
+                D[ancestry][a2] += 1
+                A.append(a2)
+        L = []
+        for allele in sorted(set(A)):
+            for ancestry in sorted([x for x in D.keys() if x != 'donor']):
+                nA = D[ancestry].get(allele, 0)
+                nD = len(D[ancestry]['donor']) * 2
+                L.append([allele, ancestry, nA, nD])
+        df = pd.DataFrame(L, columns=['Allele', 'Ancestry', 'nA', 'nD'])
         return df
 
     def association_test(

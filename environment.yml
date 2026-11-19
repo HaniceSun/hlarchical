@@ -14,7 +14,7 @@ dependencies:
   - scikit-learn=1.8.0
   - joblib=1.5.1
   - plink=1.90b7.7
-  - plink2=2.0.0a.6.9
+  - plink2
   - bcftools=1.22
   - beagle=5.5_27Feb25.75f
   - openpyxl=3.1.5
